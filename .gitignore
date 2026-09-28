@@ -1,6 +1,0 @@
-﻿node_modules/
-.env
-backups/*.sql.gz
-*.log
-.DS_Store
-Thumbs.db
