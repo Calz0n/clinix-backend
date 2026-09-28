@@ -1,0 +1,69 @@
+version: '3.8'
+
+networks:
+  clinix_net:
+    driver: bridge
+
+volumes:
+  pg_data:
+    driver: local
+
+services:
+  traefik:
+    image: docker.io/library/traefik:v3.1
+    container_name: clinix_traefik
+    restart: unless-stopped
+    security_opt:
+      - label=disable
+    command:
+      - "--api.dashboard=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+    volumes:
+      - /run/podman/podman.sock:/var/run/docker.sock:ro
+    networks:
+      - clinix_net
+
+  postgres:
+    image: docker.io/library/postgres:16-alpine
+    container_name: clinix_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: clinix_db
+      POSTGRES_USER: clinix_user
+      POSTGRES_PASSWORD: clinix_secure_password_2026
+    volumes:
+      - pg_data:/var/lib/postgresql/data:z
+      - ./init_db:/docker-entrypoint-initdb.d:z
+    networks:
+      - clinix_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Containerfile
+    container_name: clinix_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: clinix_db
+      DB_USER: clinix_user
+      DB_PASSWORD: clinix_secure_password_2026
+      JWT_SECRET: clinix_jwt_secret_coatzacoalcos_2026
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    networks:
+      - clinix_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.entrypoints=web"
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
