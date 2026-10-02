@@ -6,8 +6,13 @@ const db = require('../db');
 const router = express.Router();
 
 function obtenerLogoOficialHtml() {
-  const ruta = '/app/src/assets/logo.png';
-  if (fs.existsSync(ruta)) {
+  const rutasPosibles = [
+    path.join(__dirname, '../assets/logo.png'),
+    path.resolve(process.cwd(), 'src/assets/logo.png'),
+    '/app/src/assets/logo.png'
+  ];
+  let ruta = rutasPosibles.find(r => fs.existsSync(r));
+  if (ruta && fs.existsSync(ruta)) {
     const base64 = fs.readFileSync(ruta).toString('base64');
     return `<img src="data:image/png;base64,${base64}" style="height: 56px; max-width: 290px; object-fit: contain;" alt="Gobierno de Coatzacoalcos">`;
   }
