@@ -11,6 +11,7 @@ const nutricionRoutes = require('./routes/nutricion.routes');
 const psicologiaRoutes = require('./routes/psicologia.routes');
 const estadisticasRoutes = require('./routes/estadisticas.routes');
 const odontologiaRoutes = require('./routes/odontologia.routes');
+const usuariosRoutes = require('./routes/usuarios.routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,7 @@ app.use('/api/nutricion', nutricionRoutes);
 app.use('/api/psicologia', psicologiaRoutes);
 app.use('/api/estadisticas', estadisticasRoutes);
 app.use('/api/odontologia', odontologiaRoutes);
+app.use('/api/usuarios', usuariosRoutes);
 
 app.get('/api/health', async (req, res) => {
   try {
