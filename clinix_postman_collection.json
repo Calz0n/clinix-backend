@@ -1,0 +1,1662 @@
+{
+  "info": {
+    "_postman_id": "clinix-salud-coatzacoalcos-2026-v1",
+    "name": "Clinix Backend API — Coatzacoalcos",
+    "description": "Colección completa de pruebas para la API REST de Clinix (Dirección de Salud Pública Municipal de Coatzacoalcos, Ver.). Incluye los 7 roles clínicos, flujo completo, triaje, odontograma FDI, notas SOAP, reportes y cierre mensual.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://172.16.50.148:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00. Health & Infraestructura",
+      "item": [
+        {
+          "name": "Comprobación de Estado (Healthcheck)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Verifica estado del backend y conexión activa con PostgreSQL."
+          }
+        },
+        {
+          "name": "Listar Unidades Médicas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/unidades",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "unidades"
+              ]
+            },
+            "description": "Obtiene catálogo de centros de salud municipales activos."
+          }
+        }
+      ]
+    },
+    {
+      "name": "01. Autenticación (Auth)",
+      "item": [
+        {
+          "name": "Login - Recepción",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicio de sesión para secretaria/recepción.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"recepcion@clinix.gob.mx\",\n  \"password\": \"clinix123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login - Enfermería",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicio de sesión para triaje de enfermería.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"enfermeria@clinix.gob.mx\",\n  \"password\": \"clinix123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login - Medicina General",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicio de sesión para médico general.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"medico@clinix.gob.mx\",\n  \"password\": \"clinix123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login - Odontología",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicio de sesión para cirujano dentista.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"odonto@clinix.gob.mx\",\n  \"password\": \"clinix123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login - Nutrición",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicio de sesión para nutriólogo clínico.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nutri@clinix.gob.mx\",\n  \"password\": \"clinix123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login - Psicología",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicio de sesión para psicólogo clínico.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"psico@clinix.gob.mx\",\n  \"password\": \"clinix123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login - Dirección",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Inicio de sesión para supervisión y administración.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@clinix.gob.mx\",\n  \"password\": \"clinix123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Registro de Personal (Register)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"unidad_medica_id\": 1,\n  \"nombre\": \"Dra. Laura\",\n  \"apellidos\": \"Vázquez Cruz\",\n  \"email\": \"laura.vazquez@clinix.gob.mx\",\n  \"password\": \"clinix_password_2026\",\n  \"rol\": \"MEDICO_GENERAL\",\n  \"cedula_profesional\": \"MED-778899\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Datos de Sesión Activa (/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Prueba RBAC (Panel Dirección)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/direccion-only",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "direccion-only"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Recepción y Pacientes (Expediente Único)",
+      "item": [
+        {
+          "name": "Buscar Pacientes (Indexada RF-01)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes?q=lopez",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "lopez"
+                }
+              ]
+            },
+            "description": "Búsqueda por CURP, Folio o Nombre."
+          }
+        },
+        {
+          "name": "Detalle de Paciente e Historial",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Alta Paciente Adulto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"Juan Carlos\",\n  \"apellido_paterno\": \"Pérez\",\n  \"apellido_materno\": \"González\",\n  \"curp\": \"PEGJ850614HVZNNN01\",\n  \"fecha_nacimiento\": \"1985-06-14\",\n  \"sexo\": \"M\",\n  \"estado_civil\": \"Casado/a\",\n  \"escolaridad\": \"Secundaria\",\n  \"calle_numero\": \"Av. Zaragoza 1204\",\n  \"colonia\": \"Palma Sola\",\n  \"codigo_postal\": \"96400\",\n  \"telefono\": \"9211002233\",\n  \"derechohabiencia\": \"Ninguna\",\n  \"enfermedades_previas\": \"Hipertensión controlada\",\n  \"beneficiario_programa\": true,\n  \"nombre_programa\": \"Salud Municipal Bienestar\",\n  \"num_personas_vivienda\": 4\n}"
+            }
+          }
+        },
+        {
+          "name": "Alta Paciente Menor de Edad (Regla RF-01.1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes"
+              ]
+            },
+            "description": "Obligatorio tutor para menores de 18 años.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"Mateo\",\n  \"apellido_paterno\": \"Hernández\",\n  \"apellido_materno\": \"Cruz\",\n  \"curp\": \"HECM150910HVZRRN02\",\n  \"fecha_nacimiento\": \"2015-09-10\",\n  \"sexo\": \"M\",\n  \"calle_numero\": \"Calle Hidalgo 305\",\n  \"colonia\": \"Benito Juárez Norte\",\n  \"derechohabiencia\": \"Ninguna\",\n  \"tutor\": {\n    \"nombre_completo\": \"Carmen Cruz Santos\",\n    \"parentesco\": \"Madre\",\n    \"telefono_contacto\": \"9211554433\",\n    \"tipo_identificacion\": \"INE\",\n    \"numero_identificacion\": \"0847129845123\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Actualizar o Asignar Tutor Legal",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/pacientes/1/tutor",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "pacientes",
+                "1",
+                "tutor"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre_completo\": \"Carmen Cruz Santos\",\n  \"parentesco\": \"Tutor Legal\",\n  \"telefono_contacto\": \"9211554433\",\n  \"tipo_identificacion\": \"INE\",\n  \"numero_identificacion\": \"0847129845123\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Atenciones y Tratamientos Cruzados",
+      "item": [
+        {
+          "name": "Registrar Visita Subsecuente a Triaje",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/atenciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "atenciones"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paciente_id\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "Consultar Sala de Espera Activa",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/atenciones/sala-espera?estado=TRIAJE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "atenciones",
+                "sala-espera"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "TRIAJE"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Generar Interconsulta (Tratamiento Cruzado)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/atenciones/tratamiento-cruzado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "atenciones",
+                "tratamiento-cruzado"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"atencion_origen_id\": 1,\n  \"area_origen\": \"MEDICINA_GENERAL\",\n  \"area_destino\": \"ODONTOLOGIA\",\n  \"prioridad\": \"URGENTE\",\n  \"motivo_derivacion\": \"Infección odontogénica severa con dolor agudo e inflamación facial.\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Bandeja de Interconsultas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/atenciones/tratamientos-cruzados?area_destino=ODONTOLOGIA",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "atenciones",
+                "tratamientos-cruzados"
+              ],
+              "query": [
+                {
+                  "key": "area_destino",
+                  "value": "ODONTOLOGIA"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Actualizar Estado de Interconsulta",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/atenciones/tratamientos-cruzados/1/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "atenciones",
+                "tratamientos-cruzados",
+                "1",
+                "estado"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nuevo_estado\": \"ATENDIDO\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Triaje de Enfermería",
+      "item": [
+        {
+          "name": "Evaluar Semáforo Clínico en Tiempo Real",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/triaje/evaluar-signos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "triaje",
+                "evaluar-signos"
+              ]
+            },
+            "description": "Clasifica en tiempo real en VERDE, AMARILLO o ROJO.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tension_arterial\": \"150/95\",\n  \"frecuencia_cardiaca\": 98,\n  \"frecuencia_respiratoria\": 19,\n  \"temperatura\": 37.2,\n  \"saturacion_oxigeno\": 96,\n  \"peso_kg\": 76.5,\n  \"talla_metros\": 1.68\n}"
+            }
+          }
+        },
+        {
+          "name": "Guardar Signos Vitales y Procedimientos",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/triaje",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "triaje"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"atencion_id\": 1,\n  \"tension_arterial\": \"120/80\",\n  \"frecuencia_cardiaca\": 75,\n  \"frecuencia_respiratoria\": 18,\n  \"temperatura\": 36.6,\n  \"saturacion_oxigeno\": 98,\n  \"glucosa_capilar\": 95,\n  \"peso_kg\": 70.0,\n  \"talla_metros\": 1.7,\n  \"detecciones_riesgo\": \"Sin comorbilidad crítica\",\n  \"procedimientos\": [\n    {\n      \"tipo_procedimiento\": \"Toma de Glucosa Capilar\",\n      \"cantidad\": 1,\n      \"observaciones\": \"Ayuno de 8 hrs\"\n    },\n    {\n      \"tipo_procedimiento\": \"Inyección Intramuscular\",\n      \"cantidad\": 1,\n      \"observaciones\": \"Analgésico\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Consultar Signos de una Atención",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/triaje/atencion/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "triaje",
+                "atencion",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Medicina General",
+      "item": [
+        {
+          "name": "Búsqueda en Catálogo CIE-10",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas/cie10?q=faringitis",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas",
+                "cie10"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "faringitis"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Registrar Consulta Médica (Nota SOAP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas/medicina-general",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas",
+                "medicina-general"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"atencion_id\": 1,\n  \"motivo_consulta\": \"Dolor de garganta, febrícula y malestar general desde hace 2 días.\",\n  \"observaciones\": \"Faringe hiperémica con placas blanquecinas en amígdalas.\",\n  \"nota_subjetivo\": \"Paciente refiere odinofagia intensa de 48 horas de evolución.\",\n  \"nota_objetivo\": \"Faringe congestiva, exudado purulento amigdalino, ganglios submandibulares palpables.\",\n  \"nota_analisis\": \"Cuadro clínico compatible con Faringoamigdalitis bacteriana aguda.\",\n  \"nota_plan\": \"Amoxicilina con Ácido Clavulánico 875/125 mg c/12h por 7 días, Paracetamol 500 mg c/8h por 3 días.\",\n  \"diagnostico_cie10\": \"J02.9\",\n  \"diagnostico_descripcion\": \"Faringitis aguda, no especificada\",\n  \"clasificacion_morbilidad\": \"Infecciones respiratorias agudas\",\n  \"pruebas_rapidas\": \"Prueba rápida de estreptococo (+)\",\n  \"canalizacion_externa\": \"Ninguna\",\n  \"emite_certificado\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "Obtener Consulta de Medicina General",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/consultas/medicina-general/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "consultas",
+                "medicina-general",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Odontología y Odontograma FDI",
+      "item": [
+        {
+          "name": "Obtener Plantilla FDI Adulto (32 piezas)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/odontologia/plantilla?tipo=ADULTA",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "odontologia",
+                "plantilla"
+              ],
+              "query": [
+                {
+                  "key": "tipo",
+                  "value": "ADULTA"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Obtener Plantilla FDI Infantil (20 piezas)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/odontologia/plantilla/INFANTIL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "odontologia",
+                "plantilla",
+                "INFANTIL"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Calcular Índice CPO-D / CEO-D",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/odontologia/calcular-indice",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "odontologia",
+                "calcular-indice"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo_denticion\": \"ADULTA\",\n  \"piezas\": [\n    {\n      \"numero_fdi\": 18,\n      \"cara_oclusal\": \"CARIES\",\n      \"estado_general\": \"NORMAL\"\n    },\n    {\n      \"numero_fdi\": 16,\n      \"cara_mesial\": \"RESINA\",\n      \"estado_general\": \"NORMAL\"\n    },\n    {\n      \"numero_fdi\": 24,\n      \"estado_general\": \"AUSENTE\"\n    },\n    {\n      \"numero_fdi\": 46,\n      \"estado_general\": \"EXTRACCION\"\n    },\n    {\n      \"numero_fdi\": 36,\n      \"cara_vestibular\": \"CARIES\",\n      \"estado_general\": \"NORMAL\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Guardar Consulta Odontológica",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/odontologia",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "odontologia"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"atencion_id\": 1,\n  \"motivo_consulta\": \"Revisión dental y limpieza general.\",\n  \"tipo_denticion\": \"ADULTA\",\n  \"comorbilidades_bucales\": \"Gingivitis leve por placa bacteriana\",\n  \"estudios_gabinete\": \"Serie radiográfica periapical\",\n  \"piezas\": [\n    {\n      \"numero_fdi\": 18,\n      \"cara_oclusal\": \"CARIES\",\n      \"estado_general\": \"NORMAL\"\n    },\n    {\n      \"numero_fdi\": 16,\n      \"cara_mesial\": \"RESINA\",\n      \"estado_general\": \"NORMAL\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "Obtener Detalle Consulta Odontológica",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/odontologia/consulta/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "odontologia",
+                "consulta",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Nutrición Clínica",
+      "item": [
+        {
+          "name": "Evaluar Antropometría e IMC / RCC",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutricion/evaluar-antropometria",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutricion",
+                "evaluar-antropometria"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"peso_kg\": 85.0,\n  \"talla_metros\": 1.72,\n  \"cintura_cm\": 98.0,\n  \"cadera_cm\": 102.0,\n  \"sexo\": \"M\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Guardar Consulta de Nutrición",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutricion",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutricion"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"atencion_id\": 1,\n  \"motivo_consulta\": \"Control de peso y plan de alimentación personalizado.\",\n  \"circunferencia_cintura\": 96.5,\n  \"circunferencia_cadera\": 102.0,\n  \"circunferencia_brazo\": 31.0,\n  \"porcentaje_grasa\": 27.5,\n  \"porcentaje_musculo\": 34.0,\n  \"consumo_agua_litros\": 2.5,\n  \"frecuencia_ejercicio\": \"3 veces por semana (caminata)\",\n  \"recordatorio_24h\": {\n    \"desayuno\": \"Huevos a la mexicana con 2 tortillas de maíz y café sin azúcar\",\n    \"colacion_matutina\": \"Una manzana verde con almendras\",\n    \"comida\": \"Pechuga asada con ensalada verde y 1 taza de arroz\",\n    \"colacion_vespertina\": \"Yogurt griego natural\",\n    \"cena\": \"Quesadillas de comal con queso panela y té de manzanilla\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Obtener Consulta de Nutrición",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/nutricion/consulta/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "nutricion",
+                "consulta",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. Psicología y Salud Mental",
+      "item": [
+        {
+          "name": "Plantilla Consentimiento Infantil",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/psicologia/plantilla-consentimiento/INFANTIL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "psicologia",
+                "plantilla-consentimiento",
+                "INFANTIL"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Plantilla Consentimiento Adulto",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/psicologia/plantilla-consentimiento/ADULTO",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "psicologia",
+                "plantilla-consentimiento",
+                "ADULTO"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Guardar Consulta Psicológica",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/psicologia",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "psicologia"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"atencion_id\": 1,\n  \"motivo_consulta\": \"Acompañamiento por sintomatología ansiosa y estrés laboral.\",\n  \"evaluacion_clinica\": \"Paciente orientado en tiempo, espacio y persona, afecto ansioso pero congruente.\",\n  \"nota_evolucion\": \"Segunda sesión terapéutica. Se identifican distorsiones cognitivas de catastrofización.\",\n  \"plan_intervencion\": \"Entrenamiento en técnicas de reestructuración cognitiva y respiración diafragmática.\",\n  \"consentimiento\": {\n    \"grupo_edad\": \"ADULTO\",\n    \"firmado\": true\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Obtener Consulta Psicológica",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/psicologia/consulta/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "psicologia",
+                "consulta",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Dirección y Reportes Estadísticos",
+      "item": [
+        {
+          "name": "Hoja Diaria Oficial (Datos JSON)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estadisticas/diario?fecha=2026-10-02&area=MEDICINA_GENERAL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estadisticas",
+                "diario"
+              ],
+              "query": [
+                {
+                  "key": "fecha",
+                  "value": "2026-10-02"
+                },
+                {
+                  "key": "area",
+                  "value": "MEDICINA_GENERAL"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Hoja Diaria Membretada (HTML / PDF)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estadisticas/diario/pdf?fecha=2026-10-02&area=MEDICINA_GENERAL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estadisticas",
+                "diario",
+                "pdf"
+              ],
+              "query": [
+                {
+                  "key": "fecha",
+                  "value": "2026-10-02"
+                },
+                {
+                  "key": "area",
+                  "value": "MEDICINA_GENERAL"
+                }
+              ]
+            },
+            "description": "Abre la vista membretada en navegador con botón directo de impresión o PDF."
+          }
+        },
+        {
+          "name": "Hoja Diaria en Excel (.xls)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estadisticas/diario/excel?fecha=2026-10-02&area=MEDICINA_GENERAL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estadisticas",
+                "diario",
+                "excel"
+              ],
+              "query": [
+                {
+                  "key": "fecha",
+                  "value": "2026-10-02"
+                },
+                {
+                  "key": "area",
+                  "value": "MEDICINA_GENERAL"
+                }
+              ]
+            },
+            "description": "Descarga la hoja tabular de Excel formateada."
+          }
+        },
+        {
+          "name": "Concentrado Mensual (Datos JSON)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estadisticas/mensual?anio=2026&mes=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estadisticas",
+                "mensual"
+              ],
+              "query": [
+                {
+                  "key": "anio",
+                  "value": "2026"
+                },
+                {
+                  "key": "mes",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Concentrado Mensual (HTML / PDF)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estadisticas/mensual/pdf?anio=2026&mes=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estadisticas",
+                "mensual",
+                "pdf"
+              ],
+              "query": [
+                {
+                  "key": "anio",
+                  "value": "2026"
+                },
+                {
+                  "key": "mes",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Concentrado Mensual en Excel (.xls)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estadisticas/mensual/excel?anio=2026&mes=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estadisticas",
+                "mensual",
+                "excel"
+              ],
+              "query": [
+                {
+                  "key": "anio",
+                  "value": "2026"
+                },
+                {
+                  "key": "mes",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Ejecutar Cierre y Consolidación Mensual",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estadisticas/consolidar-mes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estadisticas",
+                "consolidar-mes"
+              ]
+            },
+            "description": "Ejecuta la consolidación con validación matemática obligatoria de cuadre.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"anio\": 2026,\n  \"mes\": 10\n}"
+            }
+          }
+        },
+        {
+          "name": "Consultar Reporte Consolidado Guardado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/estadisticas/consolidado-mensual?anio=2026&mes=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "estadisticas",
+                "consolidado-mensual"
+              ],
+              "query": [
+                {
+                  "key": "anio",
+                  "value": "2026"
+                },
+                {
+                  "key": "mes",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Gestión de Personal (Usuarios)",
+      "item": [
+        {
+          "name": "Catálogo Oficial de Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/roles/catalogo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "roles",
+                "catalogo"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Listar Personal Activo",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios?activo=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios"
+              ],
+              "query": [
+                {
+                  "key": "activo",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Detalle de Usuario",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Alta de Personal Médico",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Dr. Fernando\",\n  \"apellidos\": \"Solís Orozco\",\n  \"email\": \"fernando.solis@clinix.gob.mx\",\n  \"password\": \"clinix_password_2026\",\n  \"rol\": \"ODONTOLOGO\",\n  \"cedula_profesional\": \"ODO-889911\",\n  \"unidad_medica_id\": 1\n}"
+            }
+          }
+        },
+        {
+          "name": "Actualizar Datos de Personal",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "1"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Dr. Roberto\",\n  \"apellidos\": \"Alor Vázquez\",\n  \"rol\": \"DIRECCION\",\n  \"cedula_profesional\": \"DIR-001\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Baja Lógica / Activar Personal",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/usuarios/1/estado",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "usuarios",
+                "1",
+                "estado"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"activo\": true\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
