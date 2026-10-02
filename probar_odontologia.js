@@ -32,15 +32,15 @@ async function probarOdontologia() {
     const odontogramaPrueba = JSON.parse(JSON.stringify(plantillaAdulto.odontograma));
 
     // Hallazgos:
-    // Diente 18: Caries en cara oclusal (C = 1)
+    // Diente 18 (index 0): Caries en cara oclusal (C = 1)
     odontogramaPrueba[0].cara_oclusal = 'CARIES';
-    // Diente 16: Resina en cara mesial (O = 1)
-    odontogramaPrueba.cara_mesial = 'RESINA';
-    // Diente 24: Ausente (P = 1)
-    odontogramaPrueba.estado_general = 'AUSENTE';
-    // Diente 46: Extracción (P = 2)
+    // Diente 16 (index 2): Resina en cara mesial (O = 1)
+    odontogramaPrueba[2].cara_mesial = 'RESINA';
+    // Diente 24 (index 11): Ausente (P = 1)
+    odontogramaPrueba[11].estado_general = 'AUSENTE';
+    // Diente 46 (index 18): Extracción (P = 2)
     odontogramaPrueba[18].estado_general = 'EXTRACCION';
-    // Diente 36: Caries en cara vestibular (C = 2)
+    // Diente 36 (index 29): Caries en cara vestibular (C = 2)
     odontogramaPrueba[29].cara_vestibular = 'CARIES';
 
     const resCalculo = await fetch(`${BASE_URL}/calcular-indice`, {
