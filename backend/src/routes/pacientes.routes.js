@@ -2,14 +2,11 @@ const express = require('express');
 const db = require('../db');
 const { authenticateToken, requireRoles } = require('../middleware/auth');
 
-
 const router = express.Router();
 router.use(authenticateToken);
 
-
 // Lista oficial de parentescos permitidos según el esquema municipal
 const PARENTESCOS_VALIDOS = ['Madre', 'Padre', 'Tutor Legal', 'Abuelo/a', 'Otro'];
-
 
 // Función auxiliar para calcular edad exacta en años
 function calcularEdad(fechaNacimiento) {
@@ -23,11 +20,9 @@ function calcularEdad(fechaNacimiento) {
   return edad;
 }
 
-
 // 1. GET /api/pacientes (Búsqueda indexada por CURP, Folio o Nombre - RF-01)
 router.get('/', async (req, res) => {
   const { q } = req.query;
-
 
   try {
     let query = `
@@ -51,7 +46,6 @@ router.get('/', async (req, res) => {
     `;
     const params = [];
 
-
     if (q && q.trim() !== '') {
       query += `
         WHERE p.curp ILIKE $1 
@@ -65,9 +59,7 @@ router.get('/', async (req, res) => {
       query += ` ORDER BY p.fecha_registro DESC LIMIT 20`;
     }
 
-
     const result = await db.query(query, params);
-
 
     const pacientes = result.rows.map(pac => {
       const edad = calcularEdad(pac.fecha_nacimiento);
@@ -78,18 +70,15 @@ router.get('/', async (req, res) => {
       };
     });
 
-
     res.json(pacientes);
   } catch (err) {
     res.status(500).json({ error: 'Error al buscar pacientes: ' + err.message });
   }
 });
 
-
 // 2. GET /api/pacientes/:id (Detalle completo del paciente, tutor e historial)
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
-
 
   try {
     const pacienteRes = await db.query(`
@@ -100,15 +89,12 @@ router.get('/:id', async (req, res) => {
       WHERE p.id = $1
     `, [id]);
 
-
     if (pacienteRes.rows.length === 0) {
       return res.status(404).json({ error: 'Paciente no encontrado.' });
     }
 
-
     const pac = pacienteRes.rows[0];
     const edad = calcularEdad(pac.fecha_nacimiento);
-
 
     const atencionesRes = await db.query(`
       SELECT a.id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado,
@@ -118,7 +104,6 @@ router.get('/:id', async (req, res) => {
       WHERE a.paciente_id = $1
       ORDER BY a.fecha_hora_ingreso DESC
     `, [id]);
-
 
     res.json({
       ...pac,
@@ -138,7 +123,6 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ error: 'Error al obtener expediente: ' + err.message });
   }
 });
-
 
 // 3. POST /api/pacientes (Alta con candado estricto para menores de 18 años)
 router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
@@ -164,21 +148,17 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
     tutor // { nombre_completo, parentesco, telefono_contacto, tipo_identificacion, numero_identificacion }
   } = req.body;
 
-
   // Validación de campos obligatorios básicos
   if (!nombres || !apellido_paterno || !curp || !fecha_nacimiento || !sexo || !calle_numero || !colonia || !derechohabiencia) {
     return res.status(400).json({ error: 'Faltan campos obligatorios para el registro del paciente.' });
   }
-
 
   const curpLimpia = curp.toUpperCase().trim();
   if (curpLimpia.length !== 18) {
     return res.status(400).json({ error: 'La CURP debe tener exactamente 18 caracteres.' });
   }
 
-
   const edad = calcularEdad(fecha_nacimiento);
-
 
   // REGLA CLÍNICA Y LEGAL CRÍTICA: RF-01.1
   if (edad < 18) {
@@ -190,7 +170,6 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
       });
     }
 
-
     if (!PARENTESCOS_VALIDOS.includes(tutor.parentesco)) {
       return res.status(400).json({
         error: `Parentesco del tutor no permitido: "${tutor.parentesco}". Valores autorizados: ${PARENTESCOS_VALIDOS.join(', ')}`
@@ -198,16 +177,13 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
     }
   }
 
-
   const expFinal = numero_expediente || `EXP-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
   const unidadMedicaId = req.user.unidad_medica_id || 1;
   const usuarioRecepcionId = req.user.id;
 
-
   const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
-
 
     // A. Registrar Paciente
     const insertPacQuery = `
@@ -228,7 +204,6 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
     const pacResult = await client.query(insertPacQuery, pacValues);
     const nuevoPaciente = pacResult.rows[0];
 
-
     // B. Registrar Tutor si aplica (obligatorio en menores o voluntario en adultos)
     let tutorCreado = null;
     if (tutor && tutor.nombre_completo && tutor.parentesco) {
@@ -245,7 +220,6 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
       tutorCreado = tutorResult.rows[0];
     }
 
-
     // C. Apertura de episodio en Triaje
     const insertAtencionQuery = `
       INSERT INTO atenciones_clinicas (paciente_id, unidad_medica_id, usuario_recepcion_id, tipo_atencion, estado)
@@ -254,9 +228,7 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
     `;
     const atencionResult = await client.query(insertAtencionQuery, [nuevoPaciente.id, unidadMedicaId, usuarioRecepcionId]);
 
-
     await client.query('COMMIT');
-
 
     res.status(201).json({
       mensaje: 'Expediente único aperturado exitosamente.',
@@ -284,22 +256,18 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
   }
 });
 
-
 // 4. PUT /api/pacientes/:id/tutor (Actualizar o asignar tutor a un paciente existente)
 router.put('/:id/tutor', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
   const { id } = req.params;
   const { nombre_completo, parentesco, telefono_contacto, tipo_identificacion, numero_identificacion } = req.body;
 
-
   if (!nombre_completo || !parentesco || !telefono_contacto || !tipo_identificacion) {
     return res.status(400).json({ error: 'Todos los campos del tutor son obligatorios.' });
   }
 
-
   if (!PARENTESCOS_VALIDOS.includes(parentesco)) {
     return res.status(400).json({ error: `Parentesco no permitido. Valores autorizados: ${PARENTESCOS_VALIDOS.join(', ')}` });
   }
-
 
   try {
     const upsertQuery = `
@@ -318,7 +286,6 @@ router.put('/:id/tutor', requireRoles('RECEPCION', 'DIRECCION'), async (req, res
       id, nombre_completo.trim(), parentesco, telefono_contacto.trim(), tipo_identificacion.trim(), numero_identificacion || null
     ]);
 
-
     res.json({
       mensaje: 'Datos del tutor legal actualizados exitosamente.',
       tutor: result.rows[0]
@@ -327,7 +294,6 @@ router.put('/:id/tutor', requireRoles('RECEPCION', 'DIRECCION'), async (req, res
     res.status(500).json({ error: 'Error al actualizar tutor: ' + err.message });
   }
 });
-
 
 // 4.1 PUT /api/pacientes/:id (Actualizar datos generales del paciente)
 router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
@@ -362,7 +328,6 @@ router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
     tutor
   } = req.body;
 
-
   try {
     let pacExist;
     if (!isNaN(id) && Number.isInteger(Number(id))) {
@@ -371,13 +336,11 @@ router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
       pacExist = await db.query('SELECT id, curp, fecha_nacimiento FROM pacientes WHERE numero_expediente = $1', [id]);
     }
 
-
     if (pacExist.rows.length === 0) {
       return res.status(404).json({ error: 'Paciente no encontrado.' });
     }
     const pacActual = pacExist.rows[0];
     const pacienteIdNum = pacActual.id;
-
 
     let curpFinal = pacActual.curp;
     if (curp) {
@@ -393,7 +356,6 @@ router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
         curpFinal = curpLimpia;
       }
     }
-
 
     const fNacFinal = fecha_nacimiento || pacActual.fecha_nacimiento;
     const edad = calcularEdad(fNacFinal);
@@ -416,7 +378,6 @@ router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
         ]);
       }
     }
-
 
     const updateSql = `
       UPDATE pacientes SET
@@ -447,7 +408,6 @@ router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
       RETURNING *
     `;
 
-
     const areaVal = area || area_servicio || null;
     const values = [
       nombres ? nombres.trim() : null,
@@ -476,16 +436,13 @@ router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
       pacienteIdNum
     ];
 
-
     const result = await db.query(updateSql, values);
-
 
     // Actualizar también la última atención activa/reciente del paciente si se especificó área o tipo
     if (areaVal || tipo_consulta || tipo_atencion) {
       const tipoVal = (tipo_consulta === 'Primera vez' || tipo_atencion === 'PRIMERA_VEZ')
         ? 'PRIMERA_VEZ'
         : (tipo_consulta === 'Subsecuente' || tipo_atencion === 'SUBSECUENTE' ? 'SUBSECUENTE' : null);
-
 
       await db.query(`
         UPDATE atenciones_clinicas
@@ -499,7 +456,6 @@ router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
         )
       `, [areaVal ? areaVal.trim() : null, tipoVal, pacienteIdNum]);
     }
-
 
     res.json({
       mensaje: 'Datos del expediente actualizados exitosamente.',
@@ -518,19 +474,15 @@ router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
 });
 
 
-
-
 // Función auxiliar para semáforo de triaje en expediente completo
 function evaluarSemaforoTriaje(ta, fc, fr, temp, satO2) {
   const alertas = [];
   let prioridad = 'VERDE';
 
-
   const partesTA = (ta || '').split('/');
   if (partesTA.length === 2) {
     const sistolica = parseInt(partesTA[0], 10);
     const diastolica = parseInt(partesTA[1], 10);
-
 
     if (sistolica >= 180 || diastolica >= 110) {
       alertas.push('Crisis hipertensiva');
@@ -541,7 +493,6 @@ function evaluarSemaforoTriaje(ta, fc, fr, temp, satO2) {
     }
   }
 
-
   if (satO2 < 90) {
     alertas.push('Desaturación severa (Hipoxia)');
     prioridad = 'ROJO';
@@ -549,7 +500,6 @@ function evaluarSemaforoTriaje(ta, fc, fr, temp, satO2) {
     alertas.push('Saturación limítrofe');
     if (prioridad !== 'ROJO') prioridad = 'AMARILLO';
   }
-
 
   if (temp >= 39.0) {
     alertas.push('Fiebre alta');
@@ -559,7 +509,6 @@ function evaluarSemaforoTriaje(ta, fc, fr, temp, satO2) {
     if (prioridad !== 'ROJO') prioridad = 'AMARILLO';
   }
 
-
   if (fc >= 120 || fc <= 45) {
     alertas.push('Frecuencia cardíaca crítica');
     prioridad = 'ROJO';
@@ -568,15 +517,12 @@ function evaluarSemaforoTriaje(ta, fc, fr, temp, satO2) {
     if (prioridad !== 'ROJO') prioridad = 'AMARILLO';
   }
 
-
   return { prioridad, alertas };
 }
-
 
 // 5. GET /api/pacientes/:id/historia-clinica (Consulta de antecedentes NOM-004-SSA3-2012)
 router.get('/:id/historia-clinica', async (req, res) => {
   const { id } = req.params;
-
 
   try {
     const pacienteRes = await db.query('SELECT id, sexo, fecha_nacimiento FROM pacientes WHERE id = ', [id]);
@@ -584,7 +530,6 @@ router.get('/:id/historia-clinica', async (req, res) => {
       return res.status(404).json({ error: 'Paciente no encontrado.' });
     }
     const pac = pacienteRes.rows[0];
-
 
     const hcRes = await db.query(`
       SELECT hc.*,
@@ -596,7 +541,6 @@ router.get('/:id/historia-clinica', async (req, res) => {
       WHERE hc.paciente_id = 
     `, [id]);
 
-
     if (hcRes.rows.length === 0) {
       return res.json({
         registrado: false,
@@ -605,7 +549,6 @@ router.get('/:id/historia-clinica', async (req, res) => {
         historia_clinica: null
       });
     }
-
 
     const hc = hcRes.rows[0];
     res.json({
@@ -670,14 +613,12 @@ router.get('/:id/historia-clinica', async (req, res) => {
   }
 });
 
-
 // 6. PUT /api/pacientes/:id/historia-clinica (Registro/Actualización de antecedentes NOM-004-SSA3-2012)
 router.put(
   '/:id/historia-clinica',
   requireRoles('MEDICO_GENERAL', 'ODONTOLOGO', 'NUTRIOLOGO', 'PSICOLOGO', 'ENFERMERIA', 'DIRECCION'),
   async (req, res) => {
     const { id } = req.params;
-
 
     try {
       const pacRes = await db.query('SELECT id, sexo FROM pacientes WHERE id = ', [id]);
@@ -686,14 +627,12 @@ router.put(
       }
       const pac = pacRes.rows[0];
 
-
       // Permitir payload plano o anidado
       const b = req.body || {};
       const ahf = b.heredofamiliares || {};
       const app = b.personales_patologicos || {};
       const apnp = b.personales_no_patologicos || {};
       const ago = b.ginecoobstetricos || {};
-
 
       // Heredofamiliares
       const ahf_diabetes = b.ahf_diabetes !== undefined ? Boolean(b.ahf_diabetes) : Boolean(ahf.diabetes);
@@ -704,7 +643,6 @@ router.put(
       const ahf_enfermedades_mentales = b.ahf_enfermedades_mentales !== undefined ? Boolean(b.ahf_enfermedades_mentales) : Boolean(ahf.enfermedades_mentales);
       const ahf_otros = b.ahf_otros !== undefined ? b.ahf_otros : (ahf.otros || null);
 
-
       // Personales Patológicos
       const app_alergias = b.app_alergias !== undefined ? b.app_alergias : (app.alergias || null);
       const app_quirurgicos = b.app_quirurgicos !== undefined ? b.app_quirurgicos : (app.quirurgicos || null);
@@ -713,7 +651,6 @@ router.put(
       const app_hospitalizaciones = b.app_hospitalizaciones !== undefined ? b.app_hospitalizaciones : (app.hospitalizaciones || null);
       const app_cronico_degenerativas = b.app_cronico_degenerativas !== undefined ? b.app_cronico_degenerativas : (app.cronico_degenerativas || null);
       const app_otros = b.app_otros !== undefined ? b.app_otros : (app.otros || null);
-
 
       // Personales No Patológicos
       const apnp_tabaquismo = b.apnp_tabaquismo !== undefined ? Boolean(b.apnp_tabaquismo) : Boolean(apnp.tabaquismo);
@@ -725,7 +662,6 @@ router.put(
       const apnp_vivienda_servicios = b.apnp_vivienda_servicios !== undefined ? b.apnp_vivienda_servicios : (apnp.vivienda_servicios || null);
       const apnp_zoonosis = b.apnp_zoonosis !== undefined ? b.apnp_zoonosis : (apnp.zoonosis || null);
       const apnp_actividad_fisica = b.apnp_actividad_fisica !== undefined ? b.apnp_actividad_fisica : (apnp.actividad_fisica || null);
-
 
       // Gineco-Obstétricos (Solo si sexo Femenino)
       let ago_menarca = null;
@@ -740,7 +676,6 @@ router.put(
       let ago_mastografia_fecha = null;
       let ago_observaciones = null;
 
-
       if (pac.sexo === 'F') {
         ago_menarca = b.ago_menarca !== undefined ? b.ago_menarca : (ago.menarca || null);
         ago_ritmo_menstrual = b.ago_ritmo_menstrual !== undefined ? b.ago_ritmo_menstrual : (ago.ritmo_menstrual || null);
@@ -754,7 +689,6 @@ router.put(
         ago_mastografia_fecha = b.ago_mastografia_fecha !== undefined ? b.ago_mastografia_fecha : (ago.mastografia_fecha || null);
         ago_observaciones = b.ago_observaciones !== undefined ? b.ago_observaciones : (ago.observaciones || null);
       }
-
 
       const upsertQuery = `
         INSERT INTO historias_clinicas (
@@ -815,7 +749,6 @@ router.put(
         RETURNING *
       `;
 
-
       const params = [
         id, req.user.id,
         ahf_diabetes, ahf_hipertension, ahf_cardiopatias, ahf_neoplasias, ahf_nefropatias, ahf_enfermedades_mentales, ahf_otros,
@@ -826,10 +759,8 @@ router.put(
         ago_metodo_anticonceptivo, ago_papanicolaou_fecha, ago_mastografia_fecha, ago_observaciones
       ];
 
-
       const result = await db.query(upsertQuery, params);
       const nuevoHC = result.rows[0];
-
 
       // Sincronizar resumen en pacientes para búsquedas ágiles
       if (app_cronico_degenerativas || app_alergias) {
@@ -839,7 +770,6 @@ router.put(
         ].filter(Boolean).join(' | ');
         await db.query('UPDATE pacientes SET enfermedades_previas =  WHERE id = ', [resumenPrevio, id]);
       }
-
 
       res.json({
         mensaje: 'Historia clínica actualizada exitosamente conforme a NOM-004-SSA3-2012.',
@@ -852,11 +782,9 @@ router.put(
   }
 );
 
-
 // 7. GET /api/pacientes/:id/expediente-completo (Timeline Integral del Expediente Clínico NOM-004-SSA3-2012)
 router.get('/:id/expediente-completo', async (req, res) => {
   const { id } = req.params;
-
 
   try {
     // A. Datos del Paciente
@@ -871,15 +799,12 @@ router.get('/:id/expediente-completo', async (req, res) => {
       WHERE p.id = 
     `, [id]);
 
-
     if (pacRes.rows.length === 0) {
       return res.status(404).json({ error: 'Paciente no encontrado.' });
     }
 
-
     const pac = pacRes.rows[0];
     const edad = calcularEdad(pac.fecha_nacimiento);
-
 
     // B. Historia Clínica (Antecedentes)
     const hcRes = await db.query(`
@@ -892,9 +817,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       WHERE hc.paciente_id = 
     `, [id]);
 
-
     const hc = hcRes.rows.length > 0 ? hcRes.rows[0] : null;
-
 
     // C. Atenciones clínicas (episodios / visitas)
     const atencionesRes = await db.query(`
@@ -906,15 +829,12 @@ router.get('/:id/expediente-completo', async (req, res) => {
       ORDER BY a.fecha_hora_ingreso DESC
     `, [id]);
 
-
     const atencionesIds = atencionesRes.rows.map(a => a.id);
-
 
     let triajesMap = {};
     let procedimientosMap = {};
     let consultasMap = {};
     let derivacionesMap = {};
-
 
     if (atencionesIds.length > 0) {
       // 1. Triajes
@@ -926,7 +846,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
         JOIN usuarios u ON t.enfermero_id = u.id
         WHERE t.atencion_id = ANY(::int[])
       `, [atencionesIds]);
-
 
       for (const t of triajesRes.rows) {
         const semaforo = evaluarSemaforoTriaje(
@@ -942,7 +861,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
         };
       }
 
-
       // 2. Procedimientos de enfermería
       const triajeIds = triajesRes.rows.map(t => t.id);
       if (triajeIds.length > 0) {
@@ -951,13 +869,11 @@ router.get('/:id/expediente-completo', async (req, res) => {
           WHERE p.triaje_id = ANY(::int[])
         `, [triajeIds]);
 
-
         for (const p of procRes.rows) {
           if (!procedimientosMap[p.triaje_id]) procedimientosMap[p.triaje_id] = [];
           procedimientosMap[p.triaje_id].push(p);
         }
       }
-
 
       // 3. Consultas Base
       const consultasRes = await db.query(`
@@ -971,9 +887,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
         ORDER BY c.fecha_hora ASC
       `, [atencionesIds]);
 
-
       const consultaIds = consultasRes.rows.map(c => c.id);
-
 
       // 3.1 Medicina General
       let medGenMap = {};
@@ -983,7 +897,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
         `, [consultaIds]);
         for (const m of medRes.rows) medGenMap[m.consulta_id] = m;
       }
-
 
       // 3.2 Odontología
       let odontoMap = {};
@@ -998,7 +911,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
         }
       }
 
-
       // Piezas dentales
       let piezasMap = {};
       if (odontologiaIds.length > 0) {
@@ -1011,7 +923,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
         }
       }
 
-
       // 3.3 Nutrición
       let nutriMap = {};
       if (consultaIds.length > 0) {
@@ -1020,7 +931,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
         `, [consultaIds]);
         for (const n of nutRes.rows) nutriMap[n.consulta_id] = n;
       }
-
 
       // 3.4 Psicología
       let psicoMap = {};
@@ -1031,7 +941,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
         for (const ps of psiRes.rows) psicoMap[ps.consulta_id] = ps;
       }
 
-
       // Consentimientos Informados
       let consentimientosMap = {};
       if (consultaIds.length > 0) {
@@ -1041,11 +950,9 @@ router.get('/:id/expediente-completo', async (req, res) => {
         for (const ci of consRes.rows) consentimientosMap[ci.consulta_id] = ci;
       }
 
-
       // Armar mapa de consultas por atención
       for (const cb of consultasRes.rows) {
         if (!consultasMap[cb.atencion_id]) consultasMap[cb.atencion_id] = [];
-
 
         const detalleConsulta = {
           id: cb.id,
@@ -1060,7 +967,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
             cedula_profesional: cb.especialista_cedula
           }
         };
-
 
         if (cb.area_medica === 'MEDICINA_GENERAL' && medGenMap[cb.id]) {
           const mg = medGenMap[cb.id];
@@ -1119,10 +1025,8 @@ router.get('/:id/expediente-completo', async (req, res) => {
           };
         }
 
-
         consultasMap[cb.atencion_id].push(detalleConsulta);
       }
-
 
       // 4. Derivaciones / Tratamientos Cruzados
       const derRes = await db.query(`
@@ -1131,13 +1035,11 @@ router.get('/:id/expediente-completo', async (req, res) => {
         ORDER BY fecha_hora_derivacion DESC
       `, [atencionesIds]);
 
-
       for (const d of derRes.rows) {
         if (!derivacionesMap[d.atencion_origen_id]) derivacionesMap[d.atencion_origen_id] = [];
         derivacionesMap[d.atencion_origen_id].push(d);
       }
     }
-
 
     // Estructurar array de visitas en orden cronológico inverso
     const timelineVisitas = atencionesRes.rows.map(at => {
@@ -1146,7 +1048,6 @@ router.get('/:id/expediente-completo', async (req, res) => {
       if (triajeInfo && procedimientosMap[triajeInfo.id]) {
         procedimientos = procedimientosMap[triajeInfo.id];
       }
-
 
       return {
         atencion_id: at.id,
@@ -1181,10 +1082,8 @@ router.get('/:id/expediente-completo', async (req, res) => {
       };
     });
 
-
     // Último triaje para el resumen rápido
     const ultimaAtencionConTriaje = timelineVisitas.find(v => v.triaje !== null);
-
 
     res.json({
       paciente: {
@@ -1287,5 +1186,5 @@ router.get('/:id/expediente-completo', async (req, res) => {
   }
 });
 
-
 module.exports = router;
+
