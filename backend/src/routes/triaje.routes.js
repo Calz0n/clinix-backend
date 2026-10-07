@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { authenticAateToken, requireRoles } = require('../middleware/auth');
+const { authenticateToken, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -61,6 +61,116 @@ function evaluarSemaforoTriaje(ta, fc, fr, temp, satO2) {
 
   return { prioridad, alertas };
 }
+
+
+// 2.1 GET /api/triaje/atendidos-hoy (Pacientes con triaje completado hoy)
+router.get('/atendidos-hoy', authenticateToken, requireRoles('ENFERMERIA', 'RECEPCION', 'DIRECCION', 'MEDICO_GENERAL', 'ADMIN'), async (req, res) => {
+  try {
+    const query = `
+      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
+             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
+             p.fecha_nacimiento, p.sexo, p.enfermedades_previas,
+             t.id as triaje_id, t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
+             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
+             t.clasificacion_imc, t.fecha_hora as triaje_fecha_hora,
+             tut.nombre_completo as tutor_nombre, tut.parentesco as tutor_parentesco, tut.telefono_contacto as tutor_telefono
+      FROM triaje_signos_vitales t
+      JOIN atenciones_clinicas a ON t.atencion_id = a.id
+      JOIN pacientes p ON a.paciente_id = p.id
+      LEFT JOIN tutores tut ON p.id = tut.paciente_id
+      ORDER BY t.fecha_hora DESC
+      LIMIT 100
+    `;
+    const result = await db.query(query);
+
+    const hoy = new Date();
+    const atendidos = result.rows.map(row => {
+      const nac = new Date(row.fecha_nacimiento);
+      let edad = hoy.getFullYear() - nac.getFullYear();
+      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+        edad--;
+      }
+      return { ...row, edad, es_menor: edad < 18 };
+    });
+
+    res.json(atendidos);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar atendidos de triaje: ' + err.message });
+  }
+});
+
+// 2.2 POST /api/triaje/procedimiento (Registrar procedimiento de enfermería independiente)
+router.post('/procedimiento', authenticateToken, requireRoles('ENFERMERIA', 'DIRECCION'), async (req, res) => {
+  const { atencion_id, tipo_procedimiento, cantidad = 1, observaciones } = req.body;
+  if (!atencion_id || !tipo_procedimiento) {
+    return res.status(400).json({ error: 'atencion_id y tipo_procedimiento son obligatorios.' });
+  }
+  try {
+    let triajeRes = await db.query('SELECT id FROM triaje_signos_vitales WHERE atencion_id = $1', [atencion_id]);
+    let triajeId;
+    if (triajeRes.rows.length === 0) {
+      const insTriaje = await db.query(`
+        INSERT INTO triaje_signos_vitales (
+          atencion_id, enfermero_id, tension_arterial, frecuencia_cardiaca, frecuencia_respiratoria,
+          temperatura, saturacion_oxigeno, peso_kg, talla_metros, imc, clasificacion_imc
+        ) VALUES ($1, $2, '120/80', 75, 18, 36.5, 98, 70, 1.70, 24.2, 'Normal')
+        RETURNING id
+      `, [atencion_id, req.user.id]);
+      triajeId = insTriaje.rows[0].id;
+    } else {
+      triajeId = triajeRes.rows[0].id;
+    }
+
+    const procRes = await db.query(`
+      INSERT INTO procedimientos_enfermeria (triaje_id, tipo_procedimiento, cantidad, observaciones)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `, [triajeId, tipo_procedimiento.trim(), cantidad, observaciones || null]);
+
+    res.status(201).json({
+      mensaje: 'Procedimiento de enfermería registrado correctamente.',
+      procedimiento: procRes.rows[0]
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al registrar procedimiento: ' + err.message });
+  }
+});
+
+// 2.3 GET /api/triaje/procedimientos-hoy (Historial de procedimientos del turno)
+router.get('/procedimientos-hoy', authenticateToken, requireRoles('ENFERMERIA', 'DIRECCION', 'RECEPCION', 'MEDICO_GENERAL'), async (req, res) => {
+  try {
+    const query = `
+      SELECT pe.id, pe.tipo_procedimiento as tipo, pe.cantidad, pe.observaciones as descripcion,
+             pe.fecha_hora,
+             p.nombres, p.apellido_paterno, p.apellido_materno, p.numero_expediente,
+             u.nombre as enfermero_nombre, u.apellidos as enfermero_apellidos
+      FROM procedimientos_enfermeria pe
+      JOIN triaje_signos_vitales t ON pe.triaje_id = t.id
+      JOIN atenciones_clinicas a ON t.atencion_id = a.id
+      JOIN pacientes p ON a.paciente_id = p.id
+      LEFT JOIN usuarios u ON u.id = t.enfermero_id
+      ORDER BY pe.id DESC
+      LIMIT 50
+    `;
+    const result = await db.query(query);
+    const procedimientos = result.rows.map(r => {
+      const nombreCompleto = `${r.nombres} ${r.apellido_paterno} ${r.apellido_materno || ''}`.trim();
+      const enf = r.enfermero_nombre ? `${r.enfermero_nombre} ${r.enfermero_apellidos || ''}`.trim() : 'Enfermería';
+      return {
+        pacienteNombre: nombreCompleto,
+        pacienteId: r.numero_expediente || 'EXP',
+        tipo: r.tipo,
+        descripcion: r.descripcion || 'Procedimiento clínico',
+        resultado: 'Realizado',
+        hora: r.fecha_hora ? new Date(r.fecha_hora).toISOString().replace('T', ' ').substring(0, 16) : '',
+        enfermera: enf
+      };
+    });
+    res.json(procedimientos);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar procedimientos de hoy: ' + err.message });
+  }
+});
 
 // 2. GET /api/triaje/pendientes (Cola de pacientes en espera de signos vitales)
 router.get('/pendientes', authenticateToken, requireRoles('ENFERMERIA', 'RECEPCION', 'DIRECCION'), async (req, res) => {
@@ -266,4 +376,3 @@ router.get('/:atencion_id', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
-

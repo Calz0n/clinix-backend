@@ -42,6 +42,14 @@ router.get('/diario', async (req, res) => {
       LEFT JOIN consultas_nutricion cn ON cn.consulta_id = cb.id
       LEFT JOIN consultas_odontologia co ON co.consulta_id = cb.id
       WHERE DATE(ac.fecha_hora_ingreso) = $1
+        AND (
+          $2 = 'GENERAL' OR
+          ($2 = 'MEDICINA_GENERAL' AND (ac.area_servicio ILIKE '%MEDICINA%' OR cb.area_medica = 'MEDICINA_GENERAL' OR (ac.area_servicio IS NULL AND cb.id IS NULL))) OR
+          ($2 = 'ENFERMERIA' AND (ac.area_servicio ILIKE '%ENFERM%' OR t.id IS NOT NULL)) OR
+          ($2 = 'ODONTOLOGIA' AND (ac.area_servicio ILIKE '%ODONTO%' OR cb.area_medica = 'ODONTOLOGIA')) OR
+          ($2 = 'NUTRICION' AND (ac.area_servicio ILIKE '%NUTRI%' OR cb.area_medica = 'NUTRICION')) OR
+          ($2 = 'PSICOLOGIA' AND (ac.area_servicio ILIKE '%PSICO%' OR cb.area_medica = 'PSICOLOGIA'))
+        )
       ORDER BY ac.fecha_hora_ingreso ASC
     `;
     const result = await db.query(query, [fecha, area.toUpperCase()]);
@@ -309,82 +317,291 @@ router.get('/diario/pdf', async (req, res) => {
   }
 });
 
-// 4. GET /api/estadisticas/mensual (Datos JSON)
+// CONFIGURACIÓN DINÁMICA DE REPORTES MENSUALES POR ESPECIALIDAD CLÍNICA
+const CONFIG_AREAS = {
+  GENERAL: {
+    codigo: 'GENERAL',
+    nombre: 'Concentrado General (Todas las áreas)',
+    subtitulo: 'CONCENTRADO GENERAL MENSUAL — TODAS LAS ÁREAS MUNICIPALES',
+    thGrupos: [
+      { titulo: 'SEXO', colSpan: 2 },
+      { titulo: 'TIPO ATENCIÓN', colSpan: 2 },
+      { titulo: 'ATENCIONES POR ÁREA DE SERVICIO', colSpan: 5 },
+    ],
+    columnas: [
+      { key: 'femenino', label: 'F', width: '40px' },
+      { key: 'masculino', label: 'M', width: '40px' },
+      { key: 'primera_vez', label: '1RA VEZ', width: '65px' },
+      { key: 'subsecuente', label: 'SUBSEC', width: '65px' },
+      { key: 'medicina_general', label: 'MED. GENERAL', width: '90px' },
+      { key: 'enfermeria', label: 'ENFERMERÍA', width: '90px' },
+      { key: 'odontologia', label: 'ODONTOLOGÍA', width: '90px' },
+      { key: 'nutricion', label: 'NUTRICIÓN', width: '85px' },
+      { key: 'psicologia', label: 'PSICOLOGÍA', width: '85px' },
+    ]
+  },
+  MEDICINA_GENERAL: {
+    codigo: 'MEDICINA_GENERAL',
+    nombre: 'Medicina General',
+    subtitulo: 'CONCENTRADO MENSUAL DE ATENCIONES — MEDICINA GENERAL',
+    thGrupos: [
+      { titulo: 'SEXO', colSpan: 2 },
+      { titulo: 'TIPO CONSULTA', colSpan: 2 },
+      { titulo: 'CANALIZACIONES', colSpan: 2 },
+      { titulo: 'MORBILIDAD / DIAGNÓSTICOS CIE-10', colSpan: 4 },
+    ],
+    columnas: [
+      { key: 'femenino', label: 'F', width: '40px' },
+      { key: 'masculino', label: 'M', width: '40px' },
+      { key: 'primera_vez', label: '1RA VEZ', width: '65px' },
+      { key: 'subsecuente', label: 'SUBSEC', width: '65px' },
+      { key: 'canalizados_displasia', label: 'DISPLASIA', width: '80px' },
+      { key: 'canalizados_capasits', label: 'CAPASITS', width: '80px' },
+      { key: 'respiratorias', label: 'RESPIRATORIAS', width: '100px' },
+      { key: 'digestivas', label: 'DIGESTIVAS', width: '100px' },
+      { key: 'cardio_hta', label: 'CARDIO / HTA', width: '100px' },
+      { key: 'otras_morbilidades', label: 'OTRAS', width: '90px' },
+    ]
+  },
+  ENFERMERIA: {
+    codigo: 'ENFERMERIA',
+    nombre: 'Triaje y Enfermería',
+    subtitulo: 'CONCENTRADO MENSUAL DE ATENCIONES — TRIAJE Y ENFERMERÍA',
+    thGrupos: [
+      { titulo: 'SEXO', colSpan: 2 },
+      { titulo: 'TIPO ATENCIÓN', colSpan: 2 },
+      { titulo: 'DETECCIONES OPORTUNAS DE RIESGO', colSpan: 3 },
+      { titulo: 'PROCEDIMIENTOS DE ENFERMERÍA', colSpan: 3 },
+    ],
+    columnas: [
+      { key: 'femenino', label: 'F', width: '40px' },
+      { key: 'masculino', label: 'M', width: '40px' },
+      { key: 'primera_vez', label: '1RA VEZ', width: '65px' },
+      { key: 'subsecuente', label: 'SUBSEC', width: '65px' },
+      { key: 'det_hta', label: 'HTA (T/A ALTA)', width: '85px' },
+      { key: 'det_diabetes', label: 'GLUCOSA ALTA', width: '85px' },
+      { key: 'det_obesidad', label: 'SOBREPESO/OBES.', width: '95px' },
+      { key: 'proc_curaciones', label: 'CURACIONES', width: '85px' },
+      { key: 'proc_inyecciones', label: 'INYECCIONES', width: '85px' },
+      { key: 'proc_otros', label: 'OTROS PROC.', width: '85px' },
+    ]
+  },
+  ODONTOLOGIA: {
+    codigo: 'ODONTOLOGIA',
+    nombre: 'Odontología',
+    subtitulo: 'CONCENTRADO MENSUAL DE ATENCIONES — ODONTOLOGÍA',
+    thGrupos: [
+      { titulo: 'SEXO', colSpan: 2 },
+      { titulo: 'TIPO CONSULTA', colSpan: 2 },
+      { titulo: 'POBLACIÓN / DENTICIÓN', colSpan: 2 },
+      { titulo: 'PROCEDIMIENTOS ESTOMATOLÓGICOS', colSpan: 4 },
+    ],
+    columnas: [
+      { key: 'femenino', label: 'F', width: '40px' },
+      { key: 'masculino', label: 'M', width: '40px' },
+      { key: 'primera_vez', label: '1RA VEZ', width: '65px' },
+      { key: 'subsecuente', label: 'SUBSEC', width: '65px' },
+      { key: 'dent_infantil', label: 'INFANTIL', width: '75px' },
+      { key: 'dent_adulta', label: 'ADULTA', width: '75px' },
+      { key: 'proc_profilaxis', label: 'PROFILAXIS/FLÚOR', width: '100px' },
+      { key: 'proc_obturacion', label: 'OBTURACIONES', width: '95px' },
+      { key: 'proc_extraccion', label: 'EXTRACCIONES', width: '90px' },
+      { key: 'proc_urgencias', label: 'URGENCIAS/OTRAS', width: '95px' },
+    ]
+  },
+  NUTRICION: {
+    codigo: 'NUTRICION',
+    nombre: 'Nutrición',
+    subtitulo: 'CONCENTRADO MENSUAL DE ATENCIONES — NUTRICIÓN',
+    thGrupos: [
+      { titulo: 'SEXO', colSpan: 2 },
+      { titulo: 'TIPO CONSULTA', colSpan: 2 },
+      { titulo: 'ESTADO NUTRICIONAL (EVALUACIÓN IMC)', colSpan: 4 },
+      { titulo: 'CONDICIONES ASOCIADAS', colSpan: 1 },
+    ],
+    columnas: [
+      { key: 'femenino', label: 'F', width: '40px' },
+      { key: 'masculino', label: 'M', width: '40px' },
+      { key: 'primera_vez', label: '1RA VEZ', width: '65px' },
+      { key: 'subsecuente', label: 'SUBSEC', width: '65px' },
+      { key: 'nutri_bajo_peso', label: 'BAJO PESO', width: '80px' },
+      { key: 'nutri_normopeso', label: 'NORMOPESO', width: '85px' },
+      { key: 'nutri_sobrepeso', label: 'SOBREPESO', width: '85px' },
+      { key: 'nutri_obesidad', label: 'OBESIDAD', width: '80px' },
+      { key: 'cronicos_asoc', label: 'DIABETES / HTA', width: '100px' },
+    ]
+  },
+  PSICOLOGIA: {
+    codigo: 'PSICOLOGIA',
+    nombre: 'Psicología',
+    subtitulo: 'CONCENTRADO MENSUAL DE ATENCIONES — PSICOLOGÍA',
+    thGrupos: [
+      { titulo: 'SEXO', colSpan: 2 },
+      { titulo: 'TIPO CONSULTA', colSpan: 2 },
+      { titulo: 'MOTIVOS DE ATENCIÓN Y DIAGNÓSTICO', colSpan: 4 },
+    ],
+    columnas: [
+      { key: 'femenino', label: 'F', width: '40px' },
+      { key: 'masculino', label: 'M', width: '40px' },
+      { key: 'primera_vez', label: '1RA VEZ', width: '65px' },
+      { key: 'subsecuente', label: 'SUBSEC', width: '65px' },
+      { key: 'psico_ansiedad', label: 'ANSIEDAD / ESTRÉS', width: '110px' },
+      { key: 'psico_depresion', label: 'DEPRESIÓN / DUELO', width: '110px' },
+      { key: 'psico_familiar', label: 'FAMILIA / PAREJA', width: '110px' },
+      { key: 'psico_otros', label: 'OTROS MOTIVOS', width: '100px' },
+    ]
+  }
+};
+
+// 4. GET /api/estadisticas/mensual (Datos JSON desagregados por área)
 router.get('/mensual', async (req, res) => {
   const anio = parseInt(req.query.anio || new Date().getFullYear(), 10);
   const mes = parseInt(req.query.mes || (new Date().getMonth() + 1), 10);
+  const area = (req.query.area || 'GENERAL').toUpperCase();
+  const configArea = CONFIG_AREAS[area] || CONFIG_AREAS.GENERAL;
 
   try {
     const totalDias = new Date(anio, mes, 0).getDate();
 
+    let filtroAreaSql = '';
+    if (area === 'MEDICINA_GENERAL') {
+      filtroAreaSql = "AND (ac.area_servicio ILIKE '%MEDICINA%' OR cb.area_medica = 'MEDICINA_GENERAL' OR (ac.area_servicio IS NULL AND cb.id IS NULL))";
+    } else if (area === 'ENFERMERIA') {
+      filtroAreaSql = "AND (ac.area_servicio ILIKE '%ENFERM%' OR t.id IS NOT NULL)";
+    } else if (area === 'ODONTOLOGIA') {
+      filtroAreaSql = "AND (ac.area_servicio ILIKE '%ODONTO%' OR cb.area_medica = 'ODONTOLOGIA')";
+    } else if (area === 'NUTRICION') {
+      filtroAreaSql = "AND (ac.area_servicio ILIKE '%NUTRI%' OR cb.area_medica = 'NUTRICION')";
+    } else if (area === 'PSICOLOGIA') {
+      filtroAreaSql = "AND (ac.area_servicio ILIKE '%PSICO%' OR cb.area_medica = 'PSICOLOGIA')";
+    }
+
     const dailyQuery = `
+      WITH proc_agg AS (
+        SELECT t.atencion_id,
+               COUNT(*) FILTER (WHERE pe.tipo_procedimiento ILIKE '%curaci%') as curaciones,
+               COUNT(*) FILTER (WHERE pe.tipo_procedimiento ILIKE '%inyecc%' OR pe.tipo_procedimiento ILIKE '%medicaci%') as inyecciones,
+               COUNT(*) FILTER (WHERE pe.tipo_procedimiento NOT ILIKE '%curaci%' AND pe.tipo_procedimiento NOT ILIKE '%inyecc%' AND pe.tipo_procedimiento NOT ILIKE '%medicaci%') as otros_proc
+        FROM triaje_signos_vitales t
+        JOIN procedimientos_enfermeria pe ON pe.triaje_id = t.id
+        GROUP BY t.atencion_id
+      )
       SELECT EXTRACT(DAY FROM ac.fecha_hora_ingreso)::INT as dia,
-             COUNT(*) as total_consultas,
-             COUNT(*) FILTER (WHERE p.sexo = 'F') as femenino,
-             COUNT(*) FILTER (WHERE p.sexo = 'M') as masculino,
-             COUNT(*) FILTER (WHERE ac.tipo_atencion = 'PRIMERA_VEZ') as primera_vez,
-             COUNT(*) FILTER (WHERE ac.tipo_atencion = 'SUBSECUENTE') as subsecuente,
-             COUNT(*) FILTER (WHERE cm.canalizacion_externa ILIKE '%DISPLASIA%') as canalizados_displasia,
-             COUNT(*) FILTER (WHERE cm.canalizacion_externa ILIKE '%CAPASITS%') as canalizados_capasits
+             COUNT(DISTINCT ac.id) as total_consultas,
+             COUNT(DISTINCT ac.id) FILTER (WHERE p.sexo = 'F') as femenino,
+             COUNT(DISTINCT ac.id) FILTER (WHERE p.sexo = 'M') as masculino,
+             COUNT(DISTINCT ac.id) FILTER (WHERE ac.tipo_atencion = 'PRIMERA_VEZ') as primera_vez,
+             COUNT(DISTINCT ac.id) FILTER (WHERE ac.tipo_atencion = 'SUBSECUENTE') as subsecuente,
+             
+             -- Indicadores para Concentrado General:
+             COUNT(DISTINCT ac.id) FILTER (WHERE ac.area_servicio ILIKE '%MEDICINA%' OR cb.area_medica = 'MEDICINA_GENERAL' OR (ac.area_servicio IS NULL AND cb.id IS NULL)) as medicina_general,
+             COUNT(DISTINCT ac.id) FILTER (WHERE ac.area_servicio ILIKE '%ENFERM%') as enfermeria,
+             COUNT(DISTINCT ac.id) FILTER (WHERE ac.area_servicio ILIKE '%ODONTO%' OR cb.area_medica = 'ODONTOLOGIA') as odontologia,
+             COUNT(DISTINCT ac.id) FILTER (WHERE ac.area_servicio ILIKE '%NUTRI%' OR cb.area_medica = 'NUTRICION') as nutricion,
+             COUNT(DISTINCT ac.id) FILTER (WHERE ac.area_servicio ILIKE '%PSICO%' OR cb.area_medica = 'PSICOLOGIA') as psicologia,
+
+             -- Indicadores para Medicina General:
+             COUNT(DISTINCT ac.id) FILTER (WHERE cm.canalizacion_externa ILIKE '%DISPLASIA%') as canalizados_displasia,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cm.canalizacion_externa ILIKE '%CAPASITS%') as canalizados_capasits,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cm.clasificacion_morbilidad ILIKE '%RESPIRATORIA%' OR cm.diagnostico_descripcion ILIKE '%respirator%' OR cm.diagnostico_descripcion ILIKE '%faring%' OR cm.diagnostico_descripcion ILIKE '%bronq%') as respiratorias,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cm.clasificacion_morbilidad ILIKE '%DIGESTIV%' OR cm.diagnostico_descripcion ILIKE '%gastr%' OR cm.diagnostico_descripcion ILIKE '%diarrea%' OR cm.diagnostico_descripcion ILIKE '%colitis%') as digestivas,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cm.clasificacion_morbilidad ILIKE '%CARDIO%' OR cm.clasificacion_morbilidad ILIKE '%HIPERTEN%' OR cm.clasificacion_morbilidad ILIKE '%HTA%' OR cm.diagnostico_descripcion ILIKE '%hiperten%') as cardio_hta,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cm.consulta_id IS NOT NULL AND NOT (
+               cm.clasificacion_morbilidad ILIKE '%RESPIRATORIA%' OR cm.diagnostico_descripcion ILIKE '%respirator%' OR cm.diagnostico_descripcion ILIKE '%faring%' OR cm.diagnostico_descripcion ILIKE '%bronq%' OR
+               cm.clasificacion_morbilidad ILIKE '%DIGESTIV%' OR cm.diagnostico_descripcion ILIKE '%gastr%' OR cm.diagnostico_descripcion ILIKE '%diarrea%' OR cm.diagnostico_descripcion ILIKE '%colitis%' OR
+               cm.clasificacion_morbilidad ILIKE '%CARDIO%' OR cm.clasificacion_morbilidad ILIKE '%HIPERTEN%' OR cm.clasificacion_morbilidad ILIKE '%HTA%' OR cm.diagnostico_descripcion ILIKE '%hiperten%'
+             )) as otras_morbilidades,
+
+             -- Indicadores para Triaje y Enfermería:
+             COUNT(DISTINCT ac.id) FILTER (WHERE t.tension_arterial ~ '^(1[4-9]\\d|[2-9]\\d{2})/' OR t.detecciones_riesgo ILIKE '%hiperten%') as det_hta,
+             COUNT(DISTINCT ac.id) FILTER (WHERE t.glucosa_capilar >= 126 OR t.detecciones_riesgo ILIKE '%diabet%' OR t.detecciones_riesgo ILIKE '%glucosa%') as det_diabetes,
+             COUNT(DISTINCT ac.id) FILTER (WHERE t.imc >= 25.0 OR t.clasificacion_imc ILIKE '%sobrepeso%' OR t.clasificacion_imc ILIKE '%obesidad%') as det_obesidad,
+             COALESCE(SUM(pa.curaciones), 0) as proc_curaciones,
+             COALESCE(SUM(pa.inyecciones), 0) as proc_inyecciones,
+             COALESCE(SUM(pa.otros_proc), 0) as proc_otros,
+
+             -- Indicadores para Odontología:
+             COUNT(DISTINCT ac.id) FILTER (WHERE co.tipo_denticion = 'INFANTIL') as dent_infantil,
+             COUNT(DISTINCT ac.id) FILTER (WHERE co.tipo_denticion = 'ADULTA' OR co.tipo_denticion IS NULL) as dent_adulta,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cb.motivo_consulta ILIKE '%limpieza%' OR cb.motivo_consulta ILIKE '%profilaxis%' OR cb.motivo_consulta ILIKE '%fluor%') as proc_profilaxis,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cb.motivo_consulta ILIKE '%obturaci%' OR cb.motivo_consulta ILIKE '%resina%' OR cb.motivo_consulta ILIKE '%amalgama%' OR cb.observaciones ILIKE '%obturaci%') as proc_obturacion,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cb.motivo_consulta ILIKE '%extracci%' OR cb.observaciones ILIKE '%extracci%') as proc_extraccion,
+             COUNT(DISTINCT ac.id) FILTER (WHERE co.consulta_id IS NOT NULL AND NOT (
+               cb.motivo_consulta ILIKE '%limpieza%' OR cb.motivo_consulta ILIKE '%profilaxis%' OR cb.motivo_consulta ILIKE '%fluor%' OR
+               cb.motivo_consulta ILIKE '%obturaci%' OR cb.motivo_consulta ILIKE '%resina%' OR cb.motivo_consulta ILIKE '%amalgama%' OR cb.observaciones ILIKE '%obturaci%' OR
+               cb.motivo_consulta ILIKE '%extracci%' OR cb.observaciones ILIKE '%extracci%'
+             )) as proc_urgencias,
+
+             -- Indicadores para Nutrición:
+             COUNT(DISTINCT ac.id) FILTER (WHERE t.imc > 0 AND t.imc < 18.5) as nutri_bajo_peso,
+             COUNT(DISTINCT ac.id) FILTER (WHERE t.imc >= 18.5 AND t.imc < 25.0) as nutri_normopeso,
+             COUNT(DISTINCT ac.id) FILTER (WHERE t.imc >= 25.0 AND t.imc < 30.0) as nutri_sobrepeso,
+             COUNT(DISTINCT ac.id) FILTER (WHERE t.imc >= 30.0) as nutri_obesidad,
+             COUNT(DISTINCT ac.id) FILTER (WHERE p.enfermedades_previas ILIKE '%diabet%' OR p.enfermedades_previas ILIKE '%hiperten%') as cronicos_asoc,
+
+             -- Indicadores para Psicología:
+             COUNT(DISTINCT ac.id) FILTER (WHERE cb.motivo_consulta ILIKE '%ansiedad%' OR cps.evaluacion_clinica ILIKE '%ansiedad%') as psico_ansiedad,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cb.motivo_consulta ILIKE '%depresi%' OR cb.motivo_consulta ILIKE '%duelo%' OR cps.evaluacion_clinica ILIKE '%depresi%' OR cps.evaluacion_clinica ILIKE '%duelo%') as psico_depresion,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cb.motivo_consulta ILIKE '%familia%' OR cb.motivo_consulta ILIKE '%pareja%' OR cb.motivo_consulta ILIKE '%violencia%' OR cps.evaluacion_clinica ILIKE '%familia%') as psico_familiar,
+             COUNT(DISTINCT ac.id) FILTER (WHERE cps.consulta_id IS NOT NULL AND NOT (
+               cb.motivo_consulta ILIKE '%ansiedad%' OR cps.evaluacion_clinica ILIKE '%ansiedad%' OR
+               cb.motivo_consulta ILIKE '%depresi%' OR cps.evaluacion_clinica ILIKE '%depresi%' OR cps.evaluacion_clinica ILIKE '%duelo%' OR
+               cb.motivo_consulta ILIKE '%familia%' OR cb.motivo_consulta ILIKE '%pareja%' OR cb.motivo_consulta ILIKE '%violencia%' OR cps.evaluacion_clinica ILIKE '%familia%'
+             )) as psico_otros
+
       FROM atenciones_clinicas ac
       JOIN pacientes p ON p.id = ac.paciente_id
+      LEFT JOIN triaje_signos_vitales t ON t.atencion_id = ac.id
+      LEFT JOIN proc_agg pa ON pa.atencion_id = ac.id
       LEFT JOIN consultas_base cb ON cb.atencion_id = ac.id
       LEFT JOIN consultas_medicina_general cm ON cm.consulta_id = cb.id
+      LEFT JOIN consultas_odontologia co ON co.consulta_id = cb.id
+      LEFT JOIN consultas_nutricion cn ON cn.consulta_id = cb.id
+      LEFT JOIN consultas_psicologia cps ON cps.consulta_id = cb.id
       WHERE EXTRACT(YEAR FROM ac.fecha_hora_ingreso) = $1 AND EXTRACT(MONTH FROM ac.fecha_hora_ingreso) = $2
+        ${filtroAreaSql}
       GROUP BY EXTRACT(DAY FROM ac.fecha_hora_ingreso)
       ORDER BY dia ASC
     `;
+
     const dailyRes = await db.query(dailyQuery, [anio, mes]);
     const mapaDias = {};
     dailyRes.rows.forEach(r => { mapaDias[r.dia] = r; });
 
-    const diagQuery = `
-      SELECT EXTRACT(DAY FROM cb.fecha_hora)::INT as dia,
-             COALESCE(cm.clasificacion_morbilidad, 'OTRAS') as categoria,
-             COUNT(*) as conteo
-      FROM consultas_base cb
-      JOIN consultas_medicina_general cm ON cm.consulta_id = cb.id
-      WHERE EXTRACT(YEAR FROM cb.fecha_hora) = $1 AND EXTRACT(MONTH FROM cb.fecha_hora) = $2
-      GROUP BY EXTRACT(DAY FROM cb.fecha_hora), cm.clasificacion_morbilidad
-    `;
-    const diagRes = await db.query(diagQuery, [anio, mes]);
-    const mapaDiags = {};
-    diagRes.rows.forEach(d => {
-      if (!mapaDiags[d.dia]) mapaDiags[d.dia] = {};
-      mapaDiags[d.dia][d.categoria] = parseInt(d.conteo, 10);
+    const matrizMensual = [];
+    const tot = {
+      total_consultas: 0
+    };
+    configArea.columnas.forEach(col => {
+      tot[col.key] = 0;
     });
 
-    const matrizMensual = [];
-    let totGeneral = 0, totFem = 0, totMasc = 0, tot1ra = 0, totSub = 0;
-
     for (let d = 1; d <= totalDias; d++) {
-      const reg = mapaDias[d] || {
-        total_consultas: 0, femenino: 0, masculino: 0, primera_vez: 0, subsecuente: 0,
-        canalizados_displasia: 0, canalizados_capasits: 0
-      };
-      totGeneral += parseInt(reg.total_consultas, 10);
-      totFem += parseInt(reg.femenino, 10);
-      totMasc += parseInt(reg.masculino, 10);
-      tot1ra += parseInt(reg.primera_vez, 10);
-      totSub += parseInt(reg.subsecuente, 10);
-
-      matrizMensual.push({
+      const reg = mapaDias[d] || {};
+      const fila = {
         dia: d,
         fecha: `${anio}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-        ...reg,
-        diagnosticos: mapaDiags[d] || {}
+        total_consultas: parseInt(reg.total_consultas || 0, 10)
+      };
+      tot.total_consultas += fila.total_consultas;
+
+      configArea.columnas.forEach(col => {
+        const val = parseInt(reg[col.key] || 0, 10);
+        fila[col.key] = val;
+        tot[col.key] += val;
       });
+
+      matrizMensual.push(fila);
     }
 
     res.json({
       periodo: { anio, mes, dias_en_mes: totalDias },
-      totales_mensuales: {
-        total_consultas: totGeneral,
-        femenino: totFem,
-        masculino: totMasc,
-        primera_vez: tot1ra,
-        subsecuente: totSub
-      },
+      area,
+      area_nombre: configArea.nombre,
+      area_subtitulo: configArea.subtitulo,
+      th_grupos: configArea.thGrupos,
+      config_columnas: configArea.columnas,
+      totales_mensuales: tot,
       dias: matrizMensual
     });
   } catch (err) {
@@ -396,12 +613,19 @@ router.get('/mensual', async (req, res) => {
 router.get(['/mensual/excel', '/mensual/csv'], async (req, res) => {
   const anio = req.query.anio || new Date().getFullYear();
   const mes = req.query.mes || (new Date().getMonth() + 1);
+  const area = (req.query.area || 'GENERAL').toUpperCase();
 
   try {
-    const dataRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/estadisticas/mensual?anio=${anio}&mes=${mes}`);
+    const dataRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/estadisticas/mensual?anio=${anio}&mes=${mes}&area=${area}`);
     const data = await dataRes.json();
     const dias = data.dias || [];
-    const tot = data.totales_mensuales;
+    const tot = data.totales_mensuales || {};
+    const thGrupos = data.th_grupos || [];
+    const configColumnas = data.config_columnas || [];
+    const numCols = configColumnas.length + 2; // DÍA + Columnas + TOTAL DÍA
+
+    const mesesNombres = ['', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+    const nombreMes = mesesNombres[parseInt(mes, 10)] || `MES ${mes}`;
 
     const excelHtml = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -412,7 +636,7 @@ router.get(['/mensual/excel', '/mensual/csv'], async (req, res) => {
         <x:ExcelWorkbook>
           <x:ExcelWorksheets>
             <x:ExcelWorksheet>
-              <x:Name>Concentrado Mensual</x:Name>
+              <x:Name>${data.area_nombre || 'Concentrado'}</x:Name>
               <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
             </x:ExcelWorksheet>
           </x:ExcelWorksheets>
@@ -424,63 +648,44 @@ router.get(['/mensual/excel', '/mensual/csv'], async (req, res) => {
         th, td { border: 1px solid #000000; padding: 4px; text-align: center; vertical-align: middle; }
         .hdr-main { background-color: #701128; color: #ffffff; font-size: 13pt; font-weight: bold; }
         .hdr-sub { background-color: #f7f7f7; color: #701128; font-size: 10pt; font-weight: bold; }
+        .hdr-meta { background-color: #eaeaea; font-size: 9pt; font-weight: bold; }
         .th-col { background-color: #d9d9d9; font-weight: bold; font-size: 8pt; color: #000000; }
         .row-total { background-color: #e6e6e6; font-weight: bold; }
+        .text-left { text-align: left; }
+        .text-right { text-align: right; }
       </style>
     </head>
     <body>
       <table>
         <tr>
-          <th colspan="12" class="hdr-main">H. AYUNTAMIENTO DE COATZACOALCOS &bull; DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL</th>
+          <th colspan="${numCols}" class="hdr-main">H. AYUNTAMIENTO DE COATZACOALCOS &bull; DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL</th>
         </tr>
         <tr>
-          <th colspan="12" class="hdr-sub">RESUMEN TOTAL MENSUAL Y CONCENTRADO POR DÍA &bull; PERIODO: ${mes}/${anio}</th>
+          <th colspan="${numCols}" class="hdr-sub">${data.area_subtitulo || 'CONCENTRADO MENSUAL'} &bull; PERIODO: ${nombreMes} ${anio}</th>
+        </tr>
+        <tr>
+          <td colspan="${Math.floor(numCols / 2)}" class="hdr-meta text-left"><strong>Área / Especialidad:</strong> ${data.area_nombre || area} &nbsp;|&nbsp; <strong>Unidad Médica:</strong> Sede Central Malpica</td>
+          <td colspan="${numCols - Math.floor(numCols / 2)}" class="hdr-meta text-right"><strong>TOTAL DEL MES:</strong> ${tot.total_consultas || 0} atenciones</td>
         </tr>
         <tr>
           <th rowspan="2" class="th-col" style="width: 40px;">DÍA</th>
-          <th colspan="2" class="th-col">SEXO</th>
-          <th colspan="2" class="th-col">TIPO CONSULTA</th>
-          <th colspan="2" class="th-col">CANALIZACIONES</th>
-          <th colspan="4" class="th-col">DIAGNÓSTICOS PRINCIPALES</th>
+          ${thGrupos.map(g => `<th colspan="${g.colSpan}" class="th-col">${g.titulo}</th>`).join('')}
           <th rowspan="2" class="th-col" style="width: 70px;">TOTAL DÍA</th>
         </tr>
         <tr>
-          <th class="th-col" style="width: 45px;">F</th>
-          <th class="th-col" style="width: 45px;">M</th>
-          <th class="th-col" style="width: 65px;">1RA VEZ</th>
-          <th class="th-col" style="width: 65px;">SUBSEC</th>
-          <th class="th-col" style="width: 80px;">DISPLASIA</th>
-          <th class="th-col" style="width: 80px;">CAPASITS</th>
-          <th class="th-col" style="width: 100px;">RESPIRATORIAS</th>
-          <th class="th-col" style="width: 100px;">DIGESTIVAS</th>
-          <th class="th-col" style="width: 100px;">CARDIO / HTA</th>
-          <th class="th-col" style="width: 100px;">OTRAS</th>
+          ${configColumnas.map(c => `<th class="th-col" style="width: ${c.width};">${c.label}</th>`).join('')}
         </tr>
         ${dias.map(d => `
           <tr>
             <td><strong>${d.dia}</strong></td>
-            <td>${d.femenino || 0}</td>
-            <td>${d.masculino || 0}</td>
-            <td>${d.primera_vez || 0}</td>
-            <td>${d.subsecuente || 0}</td>
-            <td>${d.canalizados_displasia || 0}</td>
-            <td>${d.canalizados_capasits || 0}</td>
-            <td>${d.diagnosticos['Infecciones respiratorias agudas'] || 0}</td>
-            <td>${d.diagnosticos['Enfermedades del sistema digestivo'] || 0}</td>
-            <td>${d.diagnosticos['Enfermedades cardiovasculares'] || 0}</td>
-            <td>${Object.keys(d.diagnosticos).reduce((acc, k) => !['Infecciones respiratorias agudas','Enfermedades del sistema digestivo','Enfermedades cardiovasculares'].includes(k) ? acc + d.diagnosticos[k] : acc, 0)}</td>
+            ${configColumnas.map(c => `<td>${d[c.key] || 0}</td>`).join('')}
             <td><strong>${d.total_consultas || 0}</strong></td>
           </tr>
         `).join('')}
         <tr class="row-total">
           <td>TOTAL</td>
-          <td>${tot.femenino}</td>
-          <td>${tot.masculino}</td>
-          <td>${tot.primera_vez}</td>
-          <td>${tot.subsecuente}</td>
-          <td colspan="2">-</td>
-          <td colspan="4">-</td>
-          <td>${tot.total_consultas}</td>
+          ${configColumnas.map(c => `<td>${tot[c.key] || 0}</td>`).join('')}
+          <td>${tot.total_consultas || 0}</td>
         </tr>
       </table>
     </body>
@@ -488,8 +693,8 @@ router.get(['/mensual/excel', '/mensual/csv'], async (req, res) => {
     `;
 
     res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="concentrado_mensual_${anio}_${String(mes).padStart(2, '0')}.xls"`);
-    res.send('\uFEFF' + excelHtml);
+    res.setHeader('Content-Disposition', `attachment; filename="concentrado_mensual_${area.toLowerCase()}_${anio}_${String(mes).padStart(2, '0')}.xls"`);
+    res.send('﻿' + excelHtml);
   } catch (err) {
     res.status(500).json({ error: 'Error al exportar Concentrado Excel: ' + err.message });
   }
@@ -499,20 +704,26 @@ router.get(['/mensual/excel', '/mensual/csv'], async (req, res) => {
 router.get('/mensual/pdf', async (req, res) => {
   const anio = req.query.anio || new Date().getFullYear();
   const mes = req.query.mes || (new Date().getMonth() + 1);
+  const area = (req.query.area || 'GENERAL').toUpperCase();
 
   try {
-    const dataRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/estadisticas/mensual?anio=${anio}&mes=${mes}`);
+    const dataRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/estadisticas/mensual?anio=${anio}&mes=${mes}&area=${area}`);
     const data = await dataRes.json();
     const dias = data.dias || [];
-    const tot = data.totales_mensuales;
+    const tot = data.totales_mensuales || {};
+    const thGrupos = data.th_grupos || [];
+    const configColumnas = data.config_columnas || [];
     const logoHtml = obtenerLogoOficialHtml();
+
+    const mesesNombres = ['', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+    const nombreMes = mesesNombres[parseInt(mes, 10)] || `MES ${mes}`;
 
     const html = `
     <!DOCTYPE html>
     <html lang="es">
     <head>
       <meta charset="utf-8">
-      <title>Concentrado Mensual - Coatzacoalcos</title>
+      <title>Concentrado Mensual - ${data.area_nombre || area} - Coatzacoalcos</title>
       <style>
         @page { size: landscape; margin: 5mm; }
         body { font-family: Arial, Helvetica, sans-serif; font-size: 8px; margin: 0; color: #111; }
@@ -520,9 +731,11 @@ router.get('/mensual/pdf', async (req, res) => {
         .brand-section { display: flex; align-items: center; gap: 14px; }
         .dept-title { font-size: 9px; font-weight: bold; color: #701128; line-height: 1.2; text-transform: uppercase; border-left: 2px solid #b38e5d; padding-left: 10px; }
         .right-box { text-align: right; }
-        .sheet-title { font-size: 11px; font-weight: bold; color: #701128; text-transform: uppercase; }
+        .sheet-title { font-size: 11px; font-weight: bold; color: #701128; text-transform: uppercase; margin-bottom: 3px; }
+        .meta-line { font-size: 8.5px; color: #231F20; }
+        .area-tag { background: #701128; color: #ffffff; padding: 1px 6px; border-radius: 3px; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-        th, td { border: 1px solid #333; padding: 2px 1px; text-align: center; }
+        th, td { border: 1px solid #333; padding: 2.5px 1px; text-align: center; }
         th { background: #f4f4f4; font-size: 7px; font-weight: bold; }
         .total-row { background: #eaeaea; font-weight: bold; font-size: 8px; }
         .no-print { margin: 8px 0; display: flex; gap: 10px; align-items: center; }
@@ -534,7 +747,7 @@ router.get('/mensual/pdf', async (req, res) => {
     <body>
       <div class="no-print">
         <button class="btn-print" onclick="window.print()">📥 Imprimir / Guardar como PDF</button>
-        <a href="/api/estadisticas/mensual/excel?anio=${anio}&mes=${mes}" class="btn-excel">📊 Descargar en Excel Formateado (.xls)</a>
+        <a href="/api/estadisticas/mensual/excel?anio=${anio}&mes=${mes}&area=${area}" class="btn-excel">📊 Descargar en Excel Formateado (.xls)</a>
       </div>
 
       <div class="header-container">
@@ -546,8 +759,12 @@ router.get('/mensual/pdf', async (req, res) => {
         </div>
 
         <div class="right-box">
-          <div class="sheet-title">RESUMEN TOTAL MENSUAL Y CONCENTRADO POR DÍA</div>
-          <div><strong>PERIODO:</strong> MES ${mes} / AÑO ${anio} &nbsp;|&nbsp; <strong>CONSULTAS TOTALES:</strong> ${tot.total_consultas}</div>
+          <div class="sheet-title">${data.area_subtitulo || 'CONCENTRADO MENSUAL'}</div>
+          <div class="meta-line">
+            <strong>PERIODO:</strong> ${nombreMes} ${anio} &nbsp;|&nbsp; 
+            <strong>ÁREA:</strong> <span class="area-tag">${data.area_nombre || area}</span> &nbsp;|&nbsp; 
+            <strong>TOTAL MES:</strong> ${tot.total_consultas || 0} atenciones
+          </div>
         </div>
       </div>
 
@@ -555,45 +772,25 @@ router.get('/mensual/pdf', async (req, res) => {
         <thead>
           <tr>
             <th rowspan="2" style="width: 25px;">DÍA</th>
-            <th colspan="2">SEXO</th>
-            <th colspan="2">TIPO CONSULTA</th>
-            <th colspan="2">CANALIZACIONES</th>
-            <th colspan="4">DIAGNÓSTICOS PRINCIPALES (MORBILIDAD)</th>
+            ${thGrupos.map(g => `<th colspan="${g.colSpan}">${g.titulo}</th>`).join('')}
             <th rowspan="2" style="width: 45px;">TOTAL DÍA</th>
           </tr>
           <tr>
-            <th>F</th><th>M</th>
-            <th>1RA VEZ</th><th>SUBSEC</th>
-            <th>DISPLASIA</th><th>CAPASITS</th>
-            <th>RESPIRATORIAS</th><th>DIGESTIVAS</th><th>CARDIO / HTA</th><th>OTRAS</th>
+            ${configColumnas.map(c => `<th style="width: ${c.width};">${c.label}</th>`).join('')}
           </tr>
         </thead>
         <tbody>
           ${dias.map(d => `
             <tr>
               <td><strong>${d.dia}</strong></td>
-              <td>${d.femenino || 0}</td>
-              <td>${d.masculino || 0}</td>
-              <td>${d.primera_vez || 0}</td>
-              <td>${d.subsecuente || 0}</td>
-              <td>${d.canalizados_displasia || 0}</td>
-              <td>${d.canalizados_capasits || 0}</td>
-              <td>${d.diagnosticos['Infecciones respiratorias agudas'] || 0}</td>
-              <td>${d.diagnosticos['Enfermedades del sistema digestivo'] || 0}</td>
-              <td>${d.diagnosticos['Enfermedades cardiovasculares'] || 0}</td>
-              <td>${Object.keys(d.diagnosticos).reduce((acc, k) => !['Infecciones respiratorias agudas','Enfermedades del sistema digestivo','Enfermedades cardiovasculares'].includes(k) ? acc + d.diagnosticos[k] : acc, 0)}</td>
+              ${configColumnas.map(c => `<td>${d[c.key] || 0}</td>`).join('')}
               <td><strong>${d.total_consultas || 0}</strong></td>
             </tr>
           `).join('')}
           <tr class="total-row">
             <td>TOTAL</td>
-            <td>${tot.femenino}</td>
-            <td>${tot.masculino}</td>
-            <td>${tot.primera_vez}</td>
-            <td>${tot.subsecuente}</td>
-            <td colspan="2">-</td>
-            <td colspan="4">-</td>
-            <td>${tot.total_consultas}</td>
+            ${configColumnas.map(c => `<td>${tot[c.key] || 0}</td>`).join('')}
+            <td>${tot.total_consultas || 0}</td>
           </tr>
         </tbody>
       </table>
@@ -607,6 +804,7 @@ router.get('/mensual/pdf', async (req, res) => {
     res.status(500).json({ error: 'Error al generar concentrado mensual: ' + err.message });
   }
 });
+
 
 // 7. POST /api/estadisticas/consolidar-mes
 router.post('/consolidar-mes', async (req, res) => {
@@ -749,4 +947,3 @@ router.get('/consolidado-mensual', async (req, res) => {
 });
 
 module.exports = router;
-
