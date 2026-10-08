@@ -23,22 +23,22 @@ function renderizarMensualHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-mensual-nutricion th {
-        font-size: 6.5px;
+        font-size: 9.8px;
         padding: 2.5px 0.5px;
       }
       .tabla-mensual-nutricion td {
-        font-size: 7px;
-        height: 14px;
+        font-size: 10.5px; font-weight: bold;
+        height: 17px;
         padding: 1px 0.5px;
       }
       .rot-col {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: nowrap;
-        font-size: 6.5px;
+        font-size: 9px;
         font-weight: bold;
         padding: 4px 1px;
-        max-height: 80px;
+        max-height: 96px;
       }
       .page-break {
         page-break-before: always;

@@ -40,22 +40,22 @@ function renderizarDiarioHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-hd-odonto th {
-        font-size: 6px;
+        font-size: 10.5px;
         padding: 2px 0.5px;
       }
       .tabla-hd-odonto td {
-        font-size: 7px;
-        height: 18px;
+        font-size: 11.5px; font-weight: bold;
+        height: 22px;
         padding: 1.5px 0.5px;
       }
       .rot-col-hd {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: nowrap;
-        font-size: 6px;
+        font-size: 10px;
         font-weight: bold;
         padding: 3px 0.5px;
-        max-height: 75px;
+        max-height: 98px;
       }
     </style>
   </head>

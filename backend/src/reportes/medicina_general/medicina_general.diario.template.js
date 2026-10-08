@@ -41,14 +41,14 @@ function renderizarDiarioHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-hd-medicina th {
-        font-size: 6px;
+        font-size: 10.5px;
         padding: 2px 1px;
         line-height: 1.05;
         vertical-align: bottom;
       }
       .tabla-hd-medicina td {
-        font-size: 6.8px;
-        height: 17px;
+        font-size: 10.5px; font-weight: 500;
+        height: 22px;
         padding: 1px 1px;
         text-align: center;
       }
@@ -62,10 +62,10 @@ function renderizarDiarioHtml(datos) {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: normal;
-        font-size: 5.2px;
+        font-size: 10px;
         font-weight: bold;
         line-height: 1.0;
-        max-height: 98px;
+        max-height: 100px;
         margin: 0 auto;
         text-align: left;
         overflow: hidden;

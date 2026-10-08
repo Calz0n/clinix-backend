@@ -45,13 +45,13 @@ function renderizarDiarioHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-hd-enf th {
-        font-size: 6.2px;
+        font-size: 10.5px;
         padding: 2px 1px;
         line-height: 1.05;
       }
       .tabla-hd-enf td {
-        font-size: 7px;
-        height: 18px;
+        font-size: 10.5px; font-weight: 500;
+        height: 22px;
         padding: 1px 1px;
         text-align: center;
       }
@@ -59,10 +59,10 @@ function renderizarDiarioHtml(datos) {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: nowrap;
-        font-size: 5.8px;
+        font-size: 10px;
         font-weight: bold;
         padding: 3px 1px;
-        max-height: 80px;
+        max-height: 98px;
         margin: 0 auto;
       }
     </style>
@@ -80,7 +80,7 @@ function renderizarDiarioHtml(datos) {
         </div>
         <div class="header-meta-right">
           <div class="titulo-reporte-oficial">HOJA DIARIA DE ENFERMERÍA</div>
-          <div style="font-size: 8px; font-weight: bold; color: #475569; margin-bottom: 2px;">
+          <div style="font-size: 10px; font-weight: bold; color: #475569; margin-bottom: 2px;">
             DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; COATZACOALCOS
           </div>
           <div class="fecha-box-container">

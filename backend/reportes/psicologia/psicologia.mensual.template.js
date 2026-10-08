@@ -26,13 +26,13 @@ function renderizarMensualHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-mensual-psico th {
-        font-size: 6.2px;
+        font-size: 9.8px;
         padding: 2px 1px;
         line-height: 1.1;
       }
       .tabla-mensual-psico td {
-        font-size: 7.2px;
-        height: 15px;
+        font-size: 10.5px; font-weight: bold;
+        height: 17px;
         padding: 1px 1px;
         text-align: center;
       }
@@ -40,10 +40,10 @@ function renderizarMensualHtml(datos) {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: nowrap;
-        font-size: 6px;
+        font-size: 9px;
         font-weight: bold;
         padding: 4px 1px;
-        max-height: 80px;
+        max-height: 96px;
         margin: 0 auto;
       }
       .hdr-sec-pob {

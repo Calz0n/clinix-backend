@@ -35,22 +35,22 @@ function renderizarDiarioHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-hd-psico th {
-        font-size: 6.8px;
+        font-size: 10.5px;
         padding: 3px 1px;
       }
       .tabla-hd-psico td {
-        font-size: 7.5px;
-        height: 18px;
+        font-size: 11.5px; font-weight: bold;
+        height: 22px;
         padding: 2px 1px;
       }
       .rot-col-hd {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: nowrap;
-        font-size: 6.8px;
+        font-size: 10px;
         font-weight: bold;
         padding: 4px 1px;
-        max-height: 75px;
+        max-height: 98px;
       }
     </style>
   </head>

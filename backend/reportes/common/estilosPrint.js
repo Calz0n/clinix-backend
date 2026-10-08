@@ -1,16 +1,14 @@
-// Estilos oficiales de impresión y visualización web para reportes institucionales
-// Dirección de Salud Pública Municipal de Coatzacoalcos 2026-2029
 
 const estilosPrint = `
   @page {
     size: landscape;
-    margin: 4mm 5mm;
+    margin: 2mm 3mm !important;
   }
   @page :left {
-    margin: 4mm 5mm;
+    margin: 2mm 3mm !important;
   }
   @page :right {
-    margin: 4mm 5mm;
+    margin: 2mm 3mm !important;
   }
   * {
     box-sizing: border-box;
@@ -19,10 +17,10 @@ const estilosPrint = `
   }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 8px;
+    font-size: 11px;
     margin: 0;
     padding: 0;
-    color: #111111;
+    color: #000000;
     background: #ffffff;
   }
   .pagina-reporte {
@@ -46,8 +44,8 @@ const estilosPrint = `
     background: #701128;
     color: #ffffff;
     border: none;
-    padding: 7px 16px;
-    font-size: 11.5px;
+    padding: 8px 18px;
+    font-size: 12px;
     cursor: pointer;
     border-radius: 4px;
     font-weight: bold;
@@ -55,66 +53,54 @@ const estilosPrint = `
     align-items: center;
     gap: 6px;
   }
-  .btn-print:hover {
-    background: #540c1d;
-  }
-  .btn-excel {
-    background: #107c41;
-    color: #ffffff;
-    text-decoration: none;
-    padding: 7px 16px;
-    font-size: 11.5px;
-    border-radius: 4px;
-    font-weight: bold;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .btn-excel:hover {
-    background: #0b5e31;
-  }
-
-  /* Encabezado oficial en pantalla (Más abajo, con separación superior elegante) */
   .header-institucional {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 2.5px solid #701128;
-    padding-bottom: 6px;
-    margin-bottom: 6px;
-    margin-top: 12px;
-    min-height: 65px;
+    border-bottom: 2.2px solid #701128;
+    padding-bottom: 3px;
+    margin-bottom: 3px;
+    margin-top: 4px;
+    min-height: 48px;
   }
   .header-brand {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
   }
   .header-brand img {
-    height: 52px;
-    max-width: 320px;
+    height: 46px;
+    max-width: 290px;
     object-fit: contain;
     display: block;
+  }
+  .logo-texto-dept {
+    font-size: 9.5px;
+    font-weight: bold;
+    color: #701128;
+    line-height: 1.22;
+    text-transform: uppercase;
+    border-left: 2.5px solid #b38e5d;
+    padding-left: 8px;
+    text-align: left;
   }
   .header-meta-right {
     text-align: right;
   }
   .titulo-reporte-oficial {
-    font-size: 13px;
-    font-weight: bold;
+    font-size: 15px;
+    font-weight: 800;
     color: #701128;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
   }
   .subtitulo-institucion {
-    font-size: 8px;
+    font-size: 9.5px;
     font-weight: bold;
-    color: #231F20;
+    color: #1e293b;
     text-transform: uppercase;
   }
-
-  /* Grid de fecha oficial */
   .fecha-box-container {
     display: inline-flex;
     border: 1px solid #000000;
@@ -122,9 +108,9 @@ const estilosPrint = `
   }
   .fecha-cell {
     border-left: 1px solid #000000;
-    padding: 1px 6px;
+    padding: 1px 7px;
     text-align: center;
-    font-size: 7px;
+    font-size: 8.5px;
     font-weight: bold;
   }
   .fecha-cell:first-child {
@@ -132,21 +118,18 @@ const estilosPrint = `
   }
   .fecha-cell strong {
     display: block;
-    font-size: 9px;
+    font-size: 11px;
   }
-
-  /* Subbarra de metadatos */
   .meta-subbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-size: 8px;
-    color: #111111;
+    font-size: 11px;
+    font-weight: bold;
+    color: #000000;
     margin-bottom: 3px;
     padding: 1px 0;
   }
-
-  /* Tablas oficiales institucionales */
   .tabla-oficial {
     width: 100%;
     border-collapse: collapse;
@@ -163,24 +146,29 @@ const estilosPrint = `
     font-weight: bold;
     text-align: center;
     vertical-align: middle;
+    color: #000000;
+    font-size: 9.5px;
   }
   .tabla-oficial td {
     text-align: center;
     vertical-align: middle;
+    color: #000000;
+    font-size: 10.5px;
+    font-weight: bold;
   }
   .total-row, .row-total {
     background-color: #e2e8f0 !important;
-    font-weight: bold;
+    font-weight: 900 !important;
+    font-size: 11px !important;
+    color: #000000 !important;
     border-top: 2px solid #000000 !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
-
-  /* Reglas específicas de impresión para encajar 31 días + TOTAL en EXACTAMENTE 1 sola hoja */
   @media print {
     @page {
       size: landscape;
-      margin: 4mm 5mm !important;
+      margin: 2mm 3mm !important;
     }
     .no-print {
       display: none !important;
@@ -188,6 +176,8 @@ const estilosPrint = `
     body {
       margin: 0 !important;
       padding: 0 !important;
+      color: #000000 !important;
+      font-size: 10.5px !important;
     }
     .pagina-reporte {
       page-break-inside: avoid !important;
@@ -198,65 +188,80 @@ const estilosPrint = `
       max-height: 100% !important;
     }
     .header-institucional {
-      min-height: 44px !important;
-      height: 44px !important;
-      margin-top: 6px !important;
+      min-height: 46px !important;
+      height: 46px !important;
+      margin-top: 1px !important;
       padding-bottom: 2px !important;
       margin-bottom: 2px !important;
+      border-bottom: 2px solid #701128 !important;
     }
     .header-brand img {
-      height: 36px !important;
-      max-width: 240px !important;
+      height: 42px !important;
+      max-width: 270px !important;
     }
     .logo-texto-dept {
-      font-size: 7px !important;
-      line-height: 1.15 !important;
-      padding-left: 6px !important;
+      font-size: 9.5px !important;
+      line-height: 1.2 !important;
+      padding-left: 7px !important;
+      color: #701128 !important;
     }
     .titulo-reporte-oficial {
-      font-size: 10.5px !important;
+      font-size: 15px !important;
       margin-bottom: 1px !important;
+      color: #701128 !important;
+      font-weight: 800 !important;
+    }
+    .subtitulo-institucion {
+      font-size: 9.5px !important;
     }
     .meta-subbar {
-      font-size: 7.5px !important;
+      font-size: 11px !important;
       margin-bottom: 2px !important;
-    }
-    .th-rot-col, .th-rot-diario {
-      height: 52px !important;
-      padding: 1px 0.5px !important;
-    }
-    .rot-th-mg, .rot-col-med {
-      max-height: 48px !important;
-      font-size: 4.8px !important;
-      line-height: 0.95 !important;
+      color: #000000 !important;
+      font-weight: bold !important;
     }
     .tabla-oficial {
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
     .tabla-oficial th {
-      font-size: 5.5px !important;
-      padding: 1px 0.5px !important;
-      line-height: 1.0 !important;
+      font-size: 9.5px !important;
+      padding: 1.5px 0.5px !important;
+      line-height: 1.1 !important;
+      color: #000000 !important;
+      font-weight: bold !important;
     }
     .tabla-oficial td {
-      font-size: 6.2px !important;
-      height: 11px !important;
+      font-size: 10.5px !important;
+      height: 17px !important;
       padding: 0 0.5px !important;
-      line-height: 1.0 !important;
+      line-height: 1.1 !important;
+      color: #000000 !important;
+      font-weight: bold !important;
     }
     .tabla-oficial tr {
-      height: 11px !important;
+      height: 17px !important;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
     .total-row, .row-total {
-      height: 12px !important;
-      font-size: 6.5px !important;
+      height: 19px !important;
+      font-size: 11px !important;
+      font-weight: 900 !important;
+      color: #000000 !important;
       page-break-inside: avoid !important;
       break-inside: avoid !important;
     }
+    .th-rot-col, .th-rot-diario {
+      height: 100px !important;
+      padding: 1px 0.5px !important;
+    }
+    .rot-th-mg, .rot-col-med, .rot-th-gen, .rot-col-enf, .rot-th-enf, .rot-col, .rot-col-hd, .rot-col-mensual, .rot-th {
+      max-height: 96px !important;
+      font-size: 9px !important;
+      line-height: 1.05 !important;
+      font-weight: bold !important;
+    }
   }
 `;
-
 module.exports = estilosPrint;

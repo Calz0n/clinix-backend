@@ -38,12 +38,12 @@ function renderizarDiarioHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-hd-nutricion th {
-        font-size: 6.8px;
+        font-size: 10.5px;
         padding: 3px 1px;
       }
       .tabla-hd-nutricion td {
-        font-size: 7.5px;
-        height: 18px;
+        font-size: 11.5px; font-weight: bold;
+        height: 22px;
         padding: 2px 1px;
       }
     </style>

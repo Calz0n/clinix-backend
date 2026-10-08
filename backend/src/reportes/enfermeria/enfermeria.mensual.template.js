@@ -26,13 +26,13 @@ function renderizarMensualHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-m-enf th {
-        font-size: 6px;
+        font-size: 9.8px;
         padding: 2px 1px;
         line-height: 1.05;
       }
       .tabla-m-enf td {
-        font-size: 7px;
-        height: 15px;
+        font-size: 10.5px; font-weight: bold;
+        height: 17px;
         padding: 1px 1px;
         text-align: center;
       }
@@ -40,10 +40,10 @@ function renderizarMensualHtml(datos) {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: nowrap;
-        font-size: 5.8px;
+        font-size: 9px;
         font-weight: bold;
         padding: 3px 1px;
-        max-height: 80px;
+        max-height: 96px;
         margin: 0 auto;
       }
       .hdr-sec-enf-a {
@@ -71,11 +71,11 @@ function renderizarMensualHtml(datos) {
         </div>
         <div class="header-meta-right">
           <div class="titulo-reporte-oficial">CONCENTRADO MENSUAL DE ENFERMERÍA</div>
-          <div style="font-size: 8px; font-weight: bold; color: #475569; margin-top: 1px;">
+          <div style="font-size: 9px; font-weight: bold; color: #475569; margin-top: 1px;">
             DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; COATZACOALCOS
           </div>
           <div style="display: inline-block; border: 1.5px solid #0f172a; border-radius: 4px; padding: 2px 8px; margin-top: 3px; background-color: #f8fafc;">
-            <span style="font-size: 7.5px; font-weight: bold; color: #64748b;">PERIODO:</span>
+            <span style="font-size: 9.8px; font-weight: bold; color: #64748b;">PERIODO:</span>
             <strong style="font-size: 8.5px; color: #0f172a; margin-left: 4px;">${nombreMes} ${anio}</strong>
           </div>
         </div>

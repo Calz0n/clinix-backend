@@ -29,19 +29,19 @@ function renderizarMensualHtml(datos) {
     <style>
       ${estilosPrint}
       .tabla-m-mg th {
-        font-size: 5.8px;
+        font-size: 9.5px;
         padding: 1px 0.5px;
         line-height: 1.05;
         vertical-align: bottom;
       }
       .tabla-m-mg td {
-        font-size: 6.8px;
-        height: 14px;
+        font-size: 10.5px; font-weight: bold;
+        height: 17px;
         padding: 1px 0.5px;
         text-align: center;
       }
       .th-rot-col {
-        height: 110px;
+        height: 100px;
         vertical-align: bottom !important;
         padding: 2px 1px !important;
         overflow: hidden;
@@ -50,10 +50,10 @@ function renderizarMensualHtml(datos) {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         white-space: normal;
-        font-size: 5.2px;
+        font-size: 9px;
         font-weight: bold;
         line-height: 1.0;
-        max-height: 104px;
+        max-height: 96px;
         margin: 0 auto;
         text-align: left;
         overflow: hidden;
@@ -120,7 +120,7 @@ function renderizarMensualHtml(datos) {
             <th rowspan="2" class="th-rot-col"><div class="rot-th-mg">OTRAS<br>ENFERMEDADES</div></th>
             <th rowspan="2" class="th-rot-col"><div class="rot-th-mg">CERTIFICADO<br>MÉDICO</div></th>
           </tr>
-          <tr style="height: 110px;">
+          <tr style="height: 100px;">
             <!-- Pob Sub -->
             <th class="th-rot-col"><div class="rot-th-mg">F</div></th>
             <th class="th-rot-col"><div class="rot-th-mg">M</div></th>
@@ -220,7 +220,7 @@ function renderizarMensualHtml(datos) {
             <th colspan="3" class="hdr-sec-b">ENFERM. GINE</th>
             <th colspan="18" class="hdr-sec-a">OTRAS ENFERMEDADES</th>
           </tr>
-          <tr style="height: 110px;">
+          <tr style="height: 100px;">
             <!-- ETS (12) -->
             <th class="th-rot-col"><div class="rot-th-mg">GARDNERELLA<br>VAGINALIS</div></th>
             <th class="th-rot-col"><div class="rot-th-mg">CANDIDIASIS<br>VAGINAL</div></th>
@@ -376,7 +376,7 @@ function renderizarMensualHtml(datos) {
             <th colspan="4" class="hdr-sec-a">PRESERVATIVOS</th>
             <th colspan="6" class="hdr-sec-b">ESTUDIOS DE GABINETES (LAB. EN SANGRE)</th>
           </tr>
-          <tr style="height: 110px;">
+          <tr style="height: 100px;">
             <!-- Detecciones (6) -->
             <th class="th-rot-col"><div class="rot-th-mg">DETECCIÓN<br>OPORTUNA CACU</div></th>
             <th class="th-rot-col"><div class="rot-th-mg">DETECCIÓN CA<br>DE MAMA</div></th>
