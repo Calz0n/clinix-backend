@@ -1,3 +1,5 @@
+// Estilos oficiales de impresión y visualización web para reportes institucionales
+// Dirección de Salud Pública Municipal de Coatzacoalcos 2026-2029
 
 const estilosPrint = `
   @page {
@@ -42,7 +44,7 @@ const estilosPrint = `
   }
   .btn-print {
     background: #701128;
-    color: #ffffff;
+    color: #ffffff !important;
     border: none;
     padding: 8px 18px;
     font-size: 12px;
@@ -52,6 +54,28 @@ const estilosPrint = `
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .btn-print:hover {
+    background: #540c1d;
+  }
+  .btn-excel {
+    background: #107c41;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    padding: 8px 18px;
+    font-size: 12px;
+    border-radius: 4px;
+    font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .btn-excel:hover {
+    background: #0b5e31;
+    color: #ffffff !important;
+    text-decoration: none !important;
   }
   .header-institucional {
     display: flex;

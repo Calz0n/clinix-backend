@@ -69,8 +69,8 @@ function renderizarDiarioHtml(datos) {
   </head>
   <body>
     <div class="no-print">
-      <button class="btn-print" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-      <a href="/api/estadisticas/diario/excel?fecha=${fecha}&area=ENFERMERIA" class="btn-excel">📊 Descargar en Excel Formateado (.xls)</a>
+      <button class="btn-print" style="background-color: #701128 !important; color: #ffffff !important; border: none !important; padding: 8px 18px !important; font-size: 12px !important; border-radius: 4px !important; font-weight: bold !important; display: inline-flex !important; align-items: center !important; gap: 6px !important; box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important; cursor: pointer !important;" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+      <a href="/api/estadisticas/diario/excel?fecha=${fecha}&area=ENFERMERIA" class="btn-excel" style="background-color: #107c41 !important; color: #ffffff !important; text-decoration: none !important; padding: 8px 18px !important; font-size: 12px !important; border-radius: 4px !important; font-weight: bold !important; display: inline-flex !important; align-items: center !important; gap: 6px !important; box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;">📊 Descargar en Excel Formateado (.xls)</a>
     </div>
 
     <div class="pagina-reporte">
