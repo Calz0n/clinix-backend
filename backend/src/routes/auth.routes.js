@@ -7,7 +7,7 @@ const { authenticateToken, requireRoles } = require('../middleware/auth');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'clinix_jwt_secret_coatzacoalcos_2026';
 
-// POST /api/auth/register (Alta de personal con password Bcrypt)
+// POST /api/auth/register (Registro de usuarios con password hasheada en Bcrypt)
 router.post('/register', async (req, res) => {
   const {
     unidad_medica_id,
@@ -33,9 +33,11 @@ router.post('/register', async (req, res) => {
   }
 
   try {
+    // 1. Cifrar contraseña con Bcrypt (cost factor 12)
     const saltRounds = 12;
     const password_hash = await bcrypt.hash(password, saltRounds);
 
+    // 2. Insertar en la base de datos
     const query = `
       INSERT INTO usuarios (unidad_medica_id, nombre, apellidos, email, password_hash, rol, cedula_profesional, activo)
       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
@@ -49,14 +51,14 @@ router.post('/register', async (req, res) => {
       user: result.rows[0]
     });
   } catch (err) {
-    if (err.code === '23505') {
+    if (err.code === '23505') { // Unique violation
       return res.status(409).json({ error: 'El correo electrónico ya se encuentra registrado.' });
     }
     res.status(500).json({ error: 'Error al registrar usuario: ' + err.message });
   }
 });
 
-// POST /api/auth/login (Inicio de sesión y entrega de JWT)
+// POST /api/auth/login (Inicio de sesión con validación Bcrypt y generación de JWT)
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -65,6 +67,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
+    // 1. Buscar usuario activo por email
     const query = `
       SELECT u.id, u.unidad_medica_id, u.nombre, u.apellidos, u.email, u.password_hash, u.rol, u.cedula_profesional, u.activo,
              m.nombre as unidad_medica_nombre
@@ -81,14 +84,16 @@ router.post('/login', async (req, res) => {
     const user = result.rows[0];
 
     if (!user.activo) {
-      return res.status(403).json({ error: 'Esta cuenta se encuentra inactiva.' });
+      return res.status(403).json({ error: 'Esta cuenta de usuario se encuentra inactiva. Contacte a Dirección.' });
     }
 
+    // 2. Validar contraseña con Bcrypt
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Credenciales inválidas.' });
     }
 
+    // 3. Generar token JWT con vigencia de 8 horas (Jornada laboral - RNF-11)
     const payload = {
       id: user.id,
       nombre: user.nombre,
@@ -101,6 +106,7 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '8h' });
 
+    // 4. Actualizar fecha de último acceso
     await db.query('UPDATE usuarios SET ultimo_acceso = NOW() WHERE id = $1', [user.id]);
 
     res.json({
@@ -113,15 +119,17 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me (Datos de la sesión activa)
+// GET /api/auth/me (Obtener perfil del usuario autenticado)
 router.get('/me', authenticateToken, (req, res) => {
-  res.json({ user: req.user });
+  res.json({
+    user: req.user
+  });
 });
 
-// GET /api/auth/direccion-only (Prueba de control de acceso RBAC)
-router.get('/direccion-only', authenticateToken, requireRoles('DIRECCION'), (req, res) => {
+// GET /api/auth/admin-only (Ejemplo de ruta protegida por rol de Dirección)
+router.get('/admin-only', authenticateToken, requireRoles('DIRECCION'), (req, res) => {
   res.json({
-    message: 'Bienvenido al panel exclusivo de Dirección de Salud Pública.',
+    message: 'Bienvenido al panel administrativo de Dirección de Salud Pública.',
     user: req.user
   });
 });

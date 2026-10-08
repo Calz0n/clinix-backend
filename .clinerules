@@ -1,0 +1,151 @@
+# .clinerules - Clinix: Sistema Web de Gestión Clínica y Control Estadístico Municipal
+# Dirección de Salud Pública Municipal de Coatzacoalcos, Ver. (Administración 2026-2029)
+
+## 1. VISIÓN GENERAL Y STACK TÉCNICO
+- **Propósito:** Sistema integral de control de pacientes, triaje, expedientes clínicos y control estadístico diario/mensual oficial para la Dirección de Salud Pública Municipal de Coatzacoalcos.
+- **Frontend:** Flutter Web (PWA), ejecutado en host local Windows (Chrome/Edge).
+- **Backend:** Node.js 20 LTS con framework Express, ejecutado en máquina virtual AlmaLinux 10 (`172.16.50.148`) bajo contenedores Podman rootless.
+- **Base de Datos:** PostgreSQL 16 Alpine en contenedor Podman (`clinix_postgres`), base de datos `clinix_db`, puerto interno 5432 (no expuesto al host, accesible solo por red `clinix_net`).
+- **Puertos de Red:**
+  - `3000`: API REST del backend (mapeado `0.0.0.0:3000->3000/tcp` en AlmaLinux).
+  - `22` / `2222`: Acceso SSH / SCP a la máquina virtual AlmaLinux (`172.16.50.148`).
+  - `80`: Gateway perimetral Traefik (para despliegue consolidado de producción).
+- **Ruta Base de la API:** `http://172.16.50.148:3000/api` (configurada en `lib/core/network/api_config.dart`).
+
+---
+
+## 2. ARQUITECTURA Y ESTRUCTURA DEL PROYECTO
+
+### Frontend (Flutter Web)
+- **Patrón Arquitectónico:** Feature-first modular. Cada especialidad médica se aísla en `lib/features/<modulo>/` con capas de `data/`, `presentation/` y `services/`.
+- **Manejo de Estado:** 
+  - `StatefulWidget` para formularios clínicos complejos con controladores reactivos.
+  - Modelos con serialización explícita (`fromJson` / `toJson`).
+  - Servicios desacoplados de red en `lib/core/network/` y `lib/core/services/`.
+  - Persistencia en memoria local para sesión activa: en flujos encadenados (como Triaje a Procedimientos), mantener estructuras en memoria (`_atendidosMemoria`, `_datosSignosCapturados`) para evitar pérdida de datos si el paciente cambia de estado en el backend.
+- **Descargas y Visualización de Reportes:** Se utiliza `ReporteDescargaHelper` (`lib/core/services/reporte_descarga_helper.dart`), el cual dispara aperturas en nueva pestaña (`html.window.open`) pasando parámetros de consulta con codificación URI (`Uri.encodeComponent`).
+
+### Backend (Node.js Express)
+- **Estructura de Directorios:**
+  ```text
+  backend/src/
+  ├── db/
+  │   └── index.js                 # Pool de conexiones pg (PostgreSQL)
+  ├── middleware/
+  │   └── auth.js                  # Validación de JWT y verificación de roles
+  ├── routes/
+  │   ├── auth.routes.js           # Registro, login con Bcrypt y JWT (8 hrs)
+  │   ├── pacientes.routes.js      # CRUD de pacientes, búsqueda CURP y expediente completo
+  │   ├── triaje.routes.js         # Signos vitales, somatometría y procedimientos de enfermería
+  │   ├── consultas.routes.js      # Consultas base y catálogo CIE-10
+  │   ├── nutricion.routes.js      # Notas nutricionales y recordatorio 24h
+  │   ├── odontologia.routes.js    # Odontograma, índices CPOD/CEOD
+  │   ├── psicologia.routes.js     # Evaluaciones y notas psicológicas
+  │   └── estadisticas.routes.js   # Enrutador central de reportes diarios y mensuales
+  └── reportes/                    # Módulo desacoplado de formatos oficiales (1:1 hojas físicas)
+      ├── common/
+      │   ├── logo.js              # Escudo Coatzacoalcos 2026-2029 en Base64 (altura 76px)
+      │   ├── estilosPrint.js      # CSS landscape oficial (@page 5mm) para impresión/PDF
+      │   ├── excelWrapper.js      # Envoltorio HTML/XML compatible con Excel (.xls)
+      │   └── profesionalHelper.js # Resolución dinámica del profesional en sesión / BD
+      ├── nutricion/               # Hoja Diaria (15 renglones) + Mensual (3 hojas oficiales)
+      ├── odontologia/             # Hoja Diaria + Concentrado Mensual (22 indicadores)
+      ├── psicologia/              # Hoja Diaria + Mensual (26 cols, etapas de desarrollo)
+      ├── medicina_general/        # Hoja Diaria + Mensual (3 hojas: Resumen, ETS, Preventivas)
+      ├── enfermeria/              # Hoja Diaria (15 renglones) + Mensual (18 columnas)
+      └── concentrado_general/     # Concentrado Mensual Maestro Ejecutivo (22 columnas)
+  ```
+- **Estándares de Reportes:** Cada carpeta en `reportes/<area>/` debe contener estrictamente:
+  1. `<area>.queries.js`: Consultas SQL y agregaciones por día.
+  2. `<area>.diario.template.js`: Plantilla HTML de Hoja Diaria y versión Excel.
+  3. `<area>.mensual.template.js`: Plantilla HTML del Concentrado Mensual y versión Excel.
+  4. `index.js`: Exportación pública estandarizada (`obtenerDatosDiarios`, `renderizarDiarioHtml`, `renderizarDiarioExcel`, `obtenerDatosMensuales`, `renderizarMensualHtml`, `renderizarMensualExcel`).
+
+---
+
+## 3. REGLAS DE NEGOCIO Y MODELOS CLAVE DE CLINIX
+
+### Entidades Principales
+1. **Pacientes (`pacientes`):**
+   - Llave de negocio: `numero_expediente` único (Formato institucional `DSPM-AÑO-XXXX`).
+   - `curp` (18 caracteres únicos, validación obligatoria).
+   - `sexo` restringido a `'M'` o `'F'`.
+   - `tipo_poblacion`: Diferenciación crítica entre `'Población Abierta'` (comunidad en general) y `'Población Cautiva'` (trabajadores sindicalizados o de confianza del Ayuntamiento, programas DIF/Municipio).
+2. **Usuarios y Roles (`usuarios`):**
+   - Roles permitidos: `RECEPCION`, `ENFERMERIA`, `MEDICO_GENERAL`, `ODONTOLOGO`, `NUTRIOLOGO`, `PSICOLOGO`, `DIRECCION`.
+   - Contraseñas protegidas con Bcrypt (cost factor 12).
+   - `cedula_profesional` para trazabilidad en recetas y reportes.
+3. **Flujo de Atención Clínica (`atenciones_clinicas`):**
+   - Estados estrictos: `RECEPCION` -> `TRIAJE` -> `EN_CONSULTA` -> `FINALIZADA`.
+   - `tipo_atencion`: `PRIMERA_VEZ` vs `SUBSECUENTE` (impacta el cálculo de morbilidad en los concentrados mensuales).
+4. **Triaje y Signos Vitales (`triaje_signos_vitales`):**
+   - Variables obligatorias: Tensión Arterial (Sistólica/Diastólica), Frecuencia Cardíaca, Frecuencia Respiratoria, Temperatura, Saturación de Oxígeno, Glucosa Capilar, Peso (kg), Talla (m).
+   - Cálculo automático de IMC y clasificación NOM.
+   - Detecciones de riesgo:
+     - Hipertensión Arterial Sistémica (HAS): T/A $\ge$ 140/90 mmHg.
+     - Diabetes Mellitus (DM): Glucosa $\ge$ 126 mg/dL en ayuno o antecedente.
+     - Obesidad: IMC $\ge$ 30.
+5. **Historia Clínica (`historias_clinicas`):**
+   - Cumplimiento de la norma **NOM-004-SSA3-2012** (Antecedentes Heredofamiliares, Personales Patológicos, No Patológicos y Gineco-Obstétricos).
+
+---
+
+## 4. ESTADO ACTUAL DEL PROYECTO
+
+### Módulos Terminados al 100%:
+- Autenticación, JWT, roles y middleware de seguridad.
+- Padrón y gestión de pacientes con búsqueda por CURP/Nombre y expediente unificado.
+- Pantalla de Triaje y Enfermería con persistencia local de atendidos y registro ágil de procedimientos independientes.
+- Módulos de consulta clínica: Medicina General (CIE-10), Odontología (Odontograma SVG), Nutrición (cálculo Z y somatometría), Psicología.
+- Generación de reportes físicos oficiales 1:1:
+  - **Nutrición:** Hoja Diaria + Concentrado Mensual (3 hojas: Población, Padecimientos, Pediatría/Laboratorio).
+  - **Odontología:** Hoja Diaria + Concentrado Mensual (22 indicadores oficiales).
+  - **Psicología:** Hoja Diaria + Concentrado Mensual (26 columnas con desglose de Niñez, Adolescencia Temprana/Tardía y Adultez Temprana/Media/Tardía).
+  - **Medicina General:** Hoja Diaria + Concentrado Mensual (3 hojas: Resumen, ETS/Padecimientos 1ra vez, Preventivas).
+  - **Enfermería:** Hoja Diaria (somatometría y procedimientos) + Concentrado Mensual (18 columnas).
+  - **Concentrado General:** Matriz mensual ejecutiva de 22 columnas con tarjetas métricas de cabecera.
+- Logotipo institucional escalado a 76px de altura y resolución dinámica del profesionista en sesión (`profesionalHelper.js`).
+- Archivo entregable empaquetado en Google Drive: `clinix-backend-reportes.zip`.
+
+### Tarea Inmediata / En Curso:
+- Verificar que el contenedor `clinix_backend` en AlmaLinux tenga cargados los últimos archivos de reportes mediante `podman cp`.
+- Validar la apertura de reportes directamente desde la UI de Flutter en Windows mediante `ReporteDescargaHelper.mostrarDialogoSeleccionReporte`.
+
+---
+
+## 5. LECCIONES APRENDIDAS Y ERRORES PROHIBIDOS (STRICT RULES)
+
+1. **PROHIBIDO ASUMIR QUE `podman restart` ACTUALIZA EL CÓDIGO DEL CONTENEDOR:**
+   - *Causa:* El contenedor `clinix_backend` se construye a partir de una imagen estática (`Containerfile`), sin montaje de volumen en vivo de `./src`.
+   - *Regla:* Si se descomprime o edita código en `~/clinix/backend/` en el host AlmaLinux, **siempre** se debe copiar al contenedor antes de reiniciar:
+     ```bash
+     podman cp ~/clinix/backend/src/reportes clinix_backend:/app/src/
+     podman cp ~/clinix/backend/src/routes/estadisticas.routes.js clinix_backend:/app/src/routes/estadisticas.routes.js
+     podman restart clinix_backend
+     ```
+   - O en su defecto, reconstruir con: `cd ~/clinix && podman-compose up -d --build backend`.
+
+2. **PROHIBIDO MODIFICAR LA IP DEL SERVIDOR ALMALINUX:**
+   - La IP fija asignada en la red local es **`172.16.50.148`**.
+   - Toda configuración en Flutter (`api_config.dart`) debe apuntar estrictamente a `http://172.16.50.148:3000/api`. Nunca usar `localhost` en Flutter Web si se prueba desde otro host o máquina virtual.
+
+3. **PROHIBIDO EJECUTAR `firewall-cmd --reload` SIN RESTAURAR RED DE PODMAN:**
+   - *Causa:* Recargar firewalld vacía las cadenas de iptables de la interfaz de puente `podman1`, rompiendo la resolución DNS interna entre contenedores y disparando el error `getaddrinfo EAI_AGAIN postgres`.
+   - *Solución:* Si ocurre, reiniciar el stack con `podman-compose down && podman-compose up -d` o reiniciar el sistema (`sudo reboot`).
+
+4. **PROHIBIDO PERDER EL ESTADO LOCAL EN TRIAJE Y ENFERMERÍA:**
+   - *Causa:* Al registrar signos vitales, el backend mueve al paciente a `EN_CONSULTA`, desapareciendo de la cola `EN_ESPERA`.
+   - *Regla:* En Flutter, la lista local `_atendidosMemoria` y el mapa `_datosSignosCapturados` deben conservarse en memoria durante toda la sesión para permitir que la enfermera seleccione al paciente y le capture procedimientos posteriores sin depender de peticiones volátiles al backend.
+
+5. **PROHIBIDO ENLAZAR IMÁGENES POR RUTAS DEL SISTEMA DE ARCHIVOS EN REPORTES HTML:**
+   - *Causa:* Las rutas tipo `<img src="/app/src/assets/logo.png">` fallan al imprimirse en navegadores externos o al exportar a Excel.
+   - *Regla:* Todo logotipo o gráfico institucional debe estar incrustado como Base64 en memoria usando `obtenerLogoHtml()` de `reportes/common/logo.js`.
+
+6. **PROHIBIDO REQUERIR AUTENTICACIÓN STRICTA POR HEADER BEARER EN REPORTES GET DE DESCARGA:**
+   - *Causa:* `html.window.open(url, '_blank')` en Flutter Web abre pestañas nativas del navegador que no permiten inyectar cabeceras HTTP personalizadas.
+   - *Regla:* Las rutas de `/diario/pdf`, `/diario/excel`, `/mensual/pdf` y `/mensual/excel` deben soportar la lectura de parámetros por URL (`?profesional=...`, `?token=...`) y tener fallback de consulta automática a la tabla `usuarios` en PostgreSQL para resolver el nombre del profesionista si no se envía el token.
+
+7. **PROHIBIDO USAR EVALUACIÓN DE VARIABLES BASH AL ESCRIBIR CÓDIGO JS CON TEMPLATE LITERALS:**
+   - *Causa:* Comandos tipo `python3 -c "code with \${var}"` hacen que bash intente interpretar `${var}` y vacíe los strings.
+   - *Regla:* Usar siempre bloques `cat << 'EOF' > script.py` con comillas simples alrededor de `EOF` para proteger los template literals de JavaScript.
+

@@ -4,6 +4,13 @@ const path = require('path');
 const db = require('../db');
 
 const router = express.Router();
+const nutricionReport = require('../reportes/nutricion');
+const odontologiaReport = require('../reportes/odontologia');
+const psicologiaReport = require('../reportes/psicologia');
+const medicinaGeneralReport = require('../reportes/medicina_general');
+const enfermeriaReport = require('../reportes/enfermeria');
+const concentradoGeneralReport = require('../reportes/concentrado_general');
+const { resolverNombreProfesional } = require('../reportes/common/profesionalHelper');
 
 function obtenerLogoOficialHtml() {
   const rutasPosibles = [
@@ -88,6 +95,73 @@ router.get('/diario', async (req, res) => {
 // 2. GET /api/estadisticas/diario/excel (Descarga de Hoja Diaria con formato idéntico para Excel)
 router.get(['/diario/excel', '/diario/csv'], async (req, res) => {
   const { fecha = new Date().toISOString().split('T')[0], area = 'MEDICINA_GENERAL' } = req.query;
+
+  if (area.toUpperCase() === 'ENFERMERIA') {
+    try {
+      const datos = await enfermeriaReport.obtenerDatosDiarios(db, fecha);
+      datos.enfermero = await resolverNombreProfesional(db, req, 'ENFERMERIA');
+      const excel = enfermeriaReport.renderizarDiarioExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="hoja_diaria_enfermeria_${fecha}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Hoja Diaria Enfermería: ' + err.message });
+    }
+  }
+
+  if (area.toUpperCase() === 'MEDICINA_GENERAL' || area.toUpperCase() === 'MEDICINA') {
+    try {
+      const datos = await medicinaGeneralReport.obtenerDatosDiarios(db, fecha);
+      datos.medico = await resolverNombreProfesional(db, req, 'MEDICINA_GENERAL');
+      const excel = medicinaGeneralReport.renderizarDiarioExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="hoja_diaria_medicina_general_${fecha}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Hoja Diaria Medicina General: ' + err.message });
+    }
+  }
+
+  if (area.toUpperCase() === 'PSICOLOGIA') {
+    try {
+      const datos = await psicologiaReport.obtenerDatosDiarios(db, fecha);
+      datos.psicologo = await resolverNombreProfesional(db, req, 'PSICOLOGIA');
+      const excel = psicologiaReport.renderizarDiarioExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="hoja_diaria_psicologia_${fecha}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Hoja Diaria Psicología: ' + err.message });
+    }
+  }
+
+  if (area.toUpperCase() === 'ODONTOLOGIA') {
+    try {
+      const datos = await odontologiaReport.obtenerDatosDiarios(db, fecha);
+      datos.odontologo = await resolverNombreProfesional(db, req, 'ODONTOLOGIA');
+      const excel = odontologiaReport.renderizarDiarioExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="hoja_diaria_odontologia_${fecha}.xls"`);
+      return res.send('﻿' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Hoja Diaria Odontología: ' + err.message });
+    }
+  }
+
+
+
+  if (area.toUpperCase() === 'NUTRICION') {
+    try {
+      const datos = await nutricionReport.obtenerDatosDiarios(db, fecha);
+      datos.nutriologo = await resolverNombreProfesional(db, req, 'NUTRICION');
+      const excel = nutricionReport.renderizarDiarioExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="hoja_diaria_nutricion_${fecha}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Hoja Diaria Nutrición: ' + err.message });
+    }
+  }
 
   try {
     const dataRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/estadisticas/diario?fecha=${fecha}&area=${area}`);
@@ -191,6 +265,66 @@ router.get(['/diario/excel', '/diario/csv'], async (req, res) => {
 // 3. GET /api/estadisticas/diario/pdf (Vista oficial con botón a Excel formateado)
 router.get('/diario/pdf', async (req, res) => {
   const { fecha = new Date().toISOString().split('T')[0], area = 'MEDICINA_GENERAL' } = req.query;
+
+  if (area.toUpperCase() === 'ENFERMERIA') {
+    try {
+      const datos = await enfermeriaReport.obtenerDatosDiarios(db, fecha);
+      datos.enfermero = await resolverNombreProfesional(db, req, 'ENFERMERIA');
+      const html = enfermeriaReport.renderizarDiarioHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Hoja Diaria Enfermería: ' + err.message });
+    }
+  }
+
+  if (area.toUpperCase() === 'MEDICINA_GENERAL' || area.toUpperCase() === 'MEDICINA' || area.toUpperCase() === 'GENERAL') {
+    try {
+      const datos = await medicinaGeneralReport.obtenerDatosDiarios(db, fecha);
+      datos.medico = await resolverNombreProfesional(db, req, 'MEDICINA_GENERAL');
+      const html = medicinaGeneralReport.renderizarDiarioHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Hoja Diaria Medicina General: ' + err.message });
+    }
+  }
+
+  if (area.toUpperCase() === 'PSICOLOGIA') {
+    try {
+      const datos = await psicologiaReport.obtenerDatosDiarios(db, fecha);
+      datos.psicologo = await resolverNombreProfesional(db, req, 'PSICOLOGIA');
+      const html = psicologiaReport.renderizarDiarioHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Hoja Diaria Psicología: ' + err.message });
+    }
+  }
+
+  if (area.toUpperCase() === 'ODONTOLOGIA') {
+    try {
+      const datos = await odontologiaReport.obtenerDatosDiarios(db, fecha);
+      datos.odontologo = await resolverNombreProfesional(db, req, 'ODONTOLOGIA');
+      const html = odontologiaReport.renderizarDiarioHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Hoja Diaria Odontología: ' + err.message });
+    }
+  }
+
+  if (area.toUpperCase() === 'NUTRICION') {
+    try {
+      const datos = await nutricionReport.obtenerDatosDiarios(db, fecha);
+      datos.nutriologo = await resolverNombreProfesional(db, req, 'NUTRICION');
+      const html = nutricionReport.renderizarDiarioHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Hoja Diaria Nutrición: ' + err.message });
+    }
+  }
 
   try {
     const dataRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/estadisticas/diario?fecha=${fecha}&area=${area}`);
@@ -615,6 +749,86 @@ router.get(['/mensual/excel', '/mensual/csv'], async (req, res) => {
   const mes = req.query.mes || (new Date().getMonth() + 1);
   const area = (req.query.area || 'GENERAL').toUpperCase();
 
+  if (area === 'GENERAL' || area === 'CONCENTRADO_GENERAL') {
+    try {
+      const datos = await concentradoGeneralReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.director = await resolverNombreProfesional(db, req, 'GENERAL');
+      const excel = concentradoGeneralReport.renderizarMensualExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="concentrado_general_${anio}_${String(mes).padStart(2, '0')}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Concentrado General: ' + err.message });
+    }
+  }
+
+  if (area === 'ENFERMERIA') {
+    try {
+      const datos = await enfermeriaReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.enfermero = await resolverNombreProfesional(db, req, 'ENFERMERIA');
+      const excel = enfermeriaReport.renderizarMensualExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="concentrado_mensual_enfermeria_${anio}_${String(mes).padStart(2, '0')}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Concentrado Mensual Enfermería: ' + err.message });
+    }
+  }
+
+  if (area === 'MEDICINA_GENERAL' || area === 'MEDICINA') {
+    try {
+      const datos = await medicinaGeneralReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.medico = await resolverNombreProfesional(db, req, 'MEDICINA_GENERAL');
+      const excel = medicinaGeneralReport.renderizarMensualExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="concentrado_mensual_medicina_general_${anio}_${String(mes).padStart(2, '0')}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Concentrado Mensual Medicina General: ' + err.message });
+    }
+  }
+
+  if (area === 'PSICOLOGIA') {
+    try {
+      const datos = await psicologiaReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.psicologo = await resolverNombreProfesional(db, req, 'PSICOLOGIA');
+      const excel = psicologiaReport.renderizarMensualExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="concentrado_mensual_psicologia_${anio}_${String(mes).padStart(2, '0')}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Concentrado Mensual Psicología: ' + err.message });
+    }
+  }
+
+  if (area === 'ODONTOLOGIA') {
+    try {
+      const datos = await odontologiaReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.odontologo = await resolverNombreProfesional(db, req, 'ODONTOLOGIA');
+      const excel = odontologiaReport.renderizarMensualExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="concentrado_mensual_odontologia_${anio}_${String(mes).padStart(2, "0")}.xls"`);
+      return res.send('﻿' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Concentrado Mensual Odontología: ' + err.message });
+    }
+  }
+
+
+
+  if (area === 'NUTRICION') {
+    try {
+      const datos = await nutricionReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.nutriologo = await resolverNombreProfesional(db, req, 'NUTRICION');
+      const excel = nutricionReport.renderizarMensualExcel(datos);
+      res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="concentrado_mensual_nutricion_${anio}_${String(mes).padStart(2, '0')}.xls"`);
+      return res.send('\uFEFF' + excel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al exportar Concentrado Mensual Nutrición: ' + err.message });
+    }
+  }
+
   try {
     const dataRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/estadisticas/mensual?anio=${anio}&mes=${mes}&area=${area}`);
     const data = await dataRes.json();
@@ -705,6 +919,78 @@ router.get('/mensual/pdf', async (req, res) => {
   const anio = req.query.anio || new Date().getFullYear();
   const mes = req.query.mes || (new Date().getMonth() + 1);
   const area = (req.query.area || 'GENERAL').toUpperCase();
+
+  if (area === 'ENFERMERIA') {
+    try {
+      const datos = await enfermeriaReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.enfermero = await resolverNombreProfesional(db, req, 'ENFERMERIA');
+      const html = enfermeriaReport.renderizarMensualHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Concentrado Mensual Enfermería: ' + err.message });
+    }
+  }
+
+  if (area === 'MEDICINA_GENERAL' || area === 'MEDICINA') {
+    try {
+      const datos = await medicinaGeneralReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.medico = await resolverNombreProfesional(db, req, 'MEDICINA_GENERAL');
+      const html = medicinaGeneralReport.renderizarMensualHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Concentrado Mensual Medicina General: ' + err.message });
+    }
+  }
+
+  if (area === 'GENERAL' || area === 'CONCENTRADO_GENERAL') {
+    try {
+      const datos = await concentradoGeneralReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.director = await resolverNombreProfesional(db, req, 'GENERAL');
+      const html = concentradoGeneralReport.renderizarMensualHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Concentrado General: ' + err.message });
+    }
+  }
+
+  if (area === 'PSICOLOGIA') {
+    try {
+      const datos = await psicologiaReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.psicologo = await resolverNombreProfesional(db, req, 'PSICOLOGIA');
+      const html = psicologiaReport.renderizarMensualHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Concentrado Mensual Psicología: ' + err.message });
+    }
+  }
+
+  if (area === 'ODONTOLOGIA') {
+    try {
+      const datos = await odontologiaReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.odontologo = await resolverNombreProfesional(db, req, 'ODONTOLOGIA');
+      const html = odontologiaReport.renderizarMensualHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Concentrado Mensual Odontología: ' + err.message });
+    }
+  }
+
+  if (area === 'NUTRICION') {
+    try {
+      const datos = await nutricionReport.obtenerDatosMensuales(db, parseInt(anio, 10), parseInt(mes, 10));
+      datos.nutriologo = await resolverNombreProfesional(db, req, 'NUTRICION');
+      const html = nutricionReport.renderizarMensualHtml(datos);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).json({ error: 'Error al generar Concentrado Mensual Nutrición: ' + err.message });
+    }
+  }
 
   try {
     const dataRes = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/estadisticas/mensual?anio=${anio}&mes=${mes}&area=${area}`);

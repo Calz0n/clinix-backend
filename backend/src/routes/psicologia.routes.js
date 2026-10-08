@@ -4,160 +4,213 @@ const { authenticateToken, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Plantillas legales estandarizadas por grupo de edad (NOM-004-SSA3-2012 y LGPDPPSO)
-const PLANTILLAS_CONSENTIMIENTO = {
-  INFANTIL: {
-    grupo_edad: 'INFANTIL',
-    requiere_tutor: true,
-    titulo: 'Consentimiento Informado para Atención Psicológica Infantil',
-    texto_legal: 'Por medio del presente documento, en mi calidad de madre, padre o tutor legal del paciente menor de edad, otorgo mi consentimiento libre, informado y expreso para la valoración, evaluación diagnóstica e intervención psicológica del menor en la Dirección de Salud Pública Municipal de Coatzacoalcos, Veracruz, garantizando la confidencialidad de la información salvo riesgo inminente a su integridad física o emocional.'
-  },
-  ADOLESCENTE: {
-    grupo_edad: 'ADOLESCENTE',
-    requiere_tutor: true,
-    titulo: 'Consentimiento y Asentimiento Informado para Atención de Adolescentes',
-    texto_legal: 'En calidad de tutor legal autorizo la intervención psicoterapéutica y, conjuntamente, el paciente adolescente asiente de manera voluntaria participar en el proceso, reconociendo el espacio de escucha ética, respeto y confidencialidad para su bienestar integral.'
-  },
-  ADULTO: {
-    grupo_edad: 'ADULTO',
-    requiere_tutor: false,
-    titulo: 'Consentimiento Informado para Atención Psicológica de Adultos',
-    texto_legal: 'Otorgo voluntariamente mi consentimiento para recibir atención y acompañamiento psicológico en la Dirección de Salud Pública Municipal de Coatzacoalcos, conociendo el encuadre de las sesiones, objetivos terapéuticos y el derecho a la confidencialidad estricta y protección de mis datos personales sensibles.'
-  }
-};
+// Máxima confidencialidad bajo NOM-004-SSA3-2012 y LGPDPPSO:
+// Solo el personal de Psicología y Dirección Médica pueden consultar o registrar notas terapéuticas
+router.use(authenticateToken);
+router.use(requireRoles('PSICOLOGO', 'DIRECCION'));
 
-// 1. GET /api/psicologia/plantilla-consentimiento/:grupo_edad
-router.get('/plantilla-consentimiento/:grupo_edad', (req, res) => {
-  const grupo = (req.params.grupo_edad || '').toUpperCase();
-  const plantilla = PLANTILLAS_CONSENTIMIENTO[grupo];
+// 1. GET /api/psicologia/interconsultas (Derivaciones pendientes hacia Psicología)
+router.get('/interconsultas', async (req, res) => {
+  try {
+    const query = `
+      SELECT tc.id as tratamiento_cruzado_id, tc.area_origen, tc.area_destino, tc.prioridad,
+             tc.motivo_derivacion, tc.fecha_hora_derivacion, tc.estado,
+             ac.id as atencion_id, ac.paciente_id, ac.numero_expediente, ac.nombres, ac.apellido_paterno,
+             ac.apellido_materno, ac.fecha_nacimiento, ac.sexo, ac.enfermedades_previas,
+             ac.tutor_id, ac.tutor_nombre, ac.tutor_parentesco, ac.tutor_telefono
+      FROM tratamientos_cruzados tc
+      JOIN (
+        SELECT a.id, a.paciente_id, p.numero_expediente, p.nombres, p.apellido_paterno, p.apellido_materno,
+               p.fecha_nacimiento, p.sexo, p.enfermedades_previas,
+               tu.id as tutor_id, tu.nombre_completo as tutor_nombre, tu.parentesco as tutor_parentesco, tu.telefono_contacto as tutor_telefono
+        FROM atenciones_clinicas a
+        JOIN pacientes p ON a.paciente_id = p.id
+        LEFT JOIN tutores tu ON p.id = tu.paciente_id
+      ) ac ON tc.atencion_origen_id = ac.id
+      WHERE tc.area_destino = 'PSICOLOGIA' AND tc.estado = 'PENDIENTE'
+      ORDER BY tc.prioridad DESC, tc.fecha_hora_derivacion ASC
+    `;
+    const result = await db.query(query);
 
-  if (!plantilla) {
-    return res.status(400).json({
-      error: 'Grupo de edad inválido. Valores permitidos: INFANTIL, ADOLESCENTE, ADULTO.'
+    const hoy = new Date();
+    const lista = result.rows.map(row => {
+      const nac = new Date(row.fecha_nacimiento);
+      let edad = hoy.getFullYear() - nac.getFullYear();
+      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+        edad--;
+      }
+      return { ...row, edad, es_menor: edad < 18 };
     });
-  }
 
-  res.json(plantilla);
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar interconsultas de psicología: ' + err.message });
+  }
 });
 
-// 2. POST /api/psicologia (Registrar consulta y consentimiento informado)
-router.post('/', authenticateToken, requireRoles('PSICOLOGO', 'DIRECCION'), async (req, res) => {
+// 2. GET /api/psicologia/historial/:paciente_id (Historial confidencial de notas de evolución terapéutica)
+router.get('/historial/:paciente_id', async (req, res) => {
+  const { paciente_id } = req.params;
+
+  try {
+    const query = `
+      SELECT cb.id as consulta_id, cb.fecha_hora, cb.motivo_consulta, cb.observaciones,
+             cp.evaluacion_clinica, cp.nota_evolucion, cp.plan_intervencion,
+             u.nombre || ' ' || u.apellidos as psicologo_nombre, u.cedula_profesional as psicologo_cedula
+      FROM consultas_base cb
+      JOIN atenciones_clinicas ac ON cb.atencion_id = ac.id
+      JOIN usuarios u ON cb.especialista_id = u.id
+      JOIN consultas_psicologia cp ON cb.id = cp.consulta_id
+      WHERE ac.paciente_id = $1 AND cb.area_medica = 'PSICOLOGIA'
+      ORDER BY cb.fecha_hora DESC
+    `;
+    const result = await db.query(query, [paciente_id]);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar historial psicológico: ' + err.message });
+  }
+});
+
+// 3. POST /api/psicologia (Registro de Sesión Terapéutica + Consentimiento Informado + Tratamiento Cruzado)
+router.post('/', async (req, res) => {
   const {
     atencion_id,
+    tratamiento_cruzado_id, // Opcional si viene derivado
     motivo_consulta,
     observaciones,
     evaluacion_clinica,
     nota_evolucion,
     plan_intervencion,
-    consentimiento // { grupo_edad, texto_legal, firmado, tutor_id }
+    consentimiento, // Objeto opcional: { grupo_edad, texto_legal, firmado, tutor_id }
+    derivar_a // Objeto opcional: { area_destino, prioridad, motivo_derivacion }
   } = req.body;
 
   if (!atencion_id || !motivo_consulta || !evaluacion_clinica || !nota_evolucion || !plan_intervencion) {
     return res.status(400).json({
-      error: 'Campos obligatorios incompletos: atencion_id, motivo_consulta, evaluacion_clinica, nota_evolucion y plan_intervencion son requeridos.'
+      error: 'La atención clínica, motivo de consulta, evaluación clínica, nota de evolución y plan de intervención son obligatorios.'
     });
   }
 
-  const client = await db.pool.connect();
+  const psicologoId = req.user.id;
+  const unidadMedicaId = req.user.unidad_medica_id || 1;
 
+  const client = await db.pool.connect();
   try {
     await client.query('BEGIN');
 
-    // 2.1 Obtener paciente_id a partir de la atención clínica
-    const atencionRes = await client.query('SELECT paciente_id FROM atenciones_clinicas WHERE id = $1', [atencion_id]);
-    if (atencionRes.rows.length === 0) {
-      throw new Error(`La atención clínica con ID ${atencion_id} no existe.`);
-    }
-    const pacienteId = atencionRes.rows[0].paciente_id;
+    // 1. Validar atención y obtener paciente
+    const atencionRes = await client.query(`
+      SELECT a.id, a.paciente_id, p.fecha_nacimiento
+      FROM atenciones_clinicas a
+      JOIN pacientes p ON a.paciente_id = p.id
+      WHERE a.id = $1
+    `, [atencion_id]);
 
-    // 2.2 Registrar en consultas_base
-    const baseRes = await client.query(`
+    if (atencionRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'La atención clínica especificada no existe.' });
+    }
+
+    const pacienteInfo = atencionRes.rows[0];
+
+    const hoy = new Date();
+    const nac = new Date(pacienteInfo.fecha_nacimiento);
+    let edad = hoy.getFullYear() - nac.getFullYear();
+    if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+      edad--;
+    }
+
+    // A. Insertar cabecera en consultas_base
+    const insertBaseQuery = `
       INSERT INTO consultas_base (atencion_id, especialista_id, area_medica, motivo_consulta, observaciones)
       VALUES ($1, $2, 'PSICOLOGIA', $3, $4)
-      RETURNING id, fecha_hora
-    `, [atencion_id, req.user.id, motivo_consulta, observaciones || null]);
-    const consultaId = baseRes.rows[0].id;
+      RETURNING *
+    `;
+    const baseResult = await client.query(insertBaseQuery, [
+      atencion_id, psicologoId, motivo_consulta.trim(), observaciones || null
+    ]);
+    const consultaBase = baseResult.rows[0];
 
-    // 2.3 Registrar datos especializados en consultas_psicologia
-    const psicoRes = await client.query(`
+    // B. Insertar nota psicológica confidencial
+    const insertPsicoQuery = `
       INSERT INTO consultas_psicologia (consulta_id, evaluacion_clinica, nota_evolucion, plan_intervencion)
       VALUES ($1, $2, $3, $4)
-      RETURNING id
-    `, [consultaId, evaluacion_clinica, nota_evolucion, plan_intervencion]);
-    const consultaPsicoId = psicoRes.rows[0].id;
+      RETURNING *
+    `;
+    const psicoResult = await client.query(insertPsicoQuery, [
+      consultaBase.id, evaluacion_clinica.trim(), nota_evolucion.trim(), plan_intervencion.trim()
+    ]);
+    const consultaPsico = psicoResult.rows[0];
 
-    // 2.4 Registrar consentimiento informado si se incluye en la consulta
-    let consentimientoId = null;
-    if (consentimiento && consentimiento.grupo_edad) {
-      const grupoNormalizado = consentimiento.grupo_edad.toUpperCase();
-      const textoDefecto = PLANTILLAS_CONSENTIMIENTO[grupoNormalizado]?.texto_legal || 'Consentimiento general de atención psicológica';
+    // C. Si venía de una interconsulta, marcarla como ATENDIDA
+    if (tratamiento_cruzado_id) {
+      await client.query(`
+        UPDATE tratamientos_cruzados 
+        SET estado = 'ATENDIDO' 
+        WHERE id = $1 AND area_destino = 'PSICOLOGIA'
+      `, [tratamiento_cruzado_id]);
+    }
 
-      const consentRes = await client.query(`
+    // D. Registrar Consentimiento Informado específico de Psicología
+    let consentGuardado = null;
+    if (consentimiento && consentimiento.texto_legal) {
+      const grupoEdad = consentimiento.grupo_edad || (edad < 12 ? 'INFANTIL' : (edad < 18 ? 'ADOLESCENTE' : 'ADULTO'));
+      const insertConsentQuery = `
         INSERT INTO consentimientos_informados (
           consulta_id, paciente_id, tutor_id, grupo_edad, texto_legal, firmado
         ) VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, firmado, fecha_firma
-      `, [
-        consultaId,
-        pacienteId,
-        consentimiento.tutor_id || null,
-        grupoNormalizado,
-        consentimiento.texto_legal || textoDefecto,
-        Boolean(consentimiento.firmado)
+        RETURNING *
+      `;
+      const consentRes = await client.query(insertConsentQuery, [
+        consultaBase.id, pacienteInfo.paciente_id, consentimiento.tutor_id || null,
+        grupoEdad, consentimiento.texto_legal, consentimiento.firmado === true
       ]);
-      consentimientoId = consentRes.rows[0].id;
+      consentGuardado = consentRes.rows[0];
     }
 
-    // 2.5 Actualizar estado de la atención a FINALIZADA
-    await client.query(`
-      UPDATE atenciones_clinicas
-      SET estado = 'FINALIZADA'
-      WHERE id = $1
-    `, [atencion_id]);
+    // E. Si el psicólogo genera una derivación a otra área (ej. Medicina General por somatización)
+    let derivacionSaliente = null;
+    if (derivar_a && derivar_a.area_destino && derivar_a.motivo_derivacion) {
+      const insertCruzadoQuery = `
+        INSERT INTO tratamientos_cruzados (atencion_origen_id, area_origen, area_destino, prioridad, motivo_derivacion, estado)
+        VALUES ($1, 'PSICOLOGIA', $2, $3, $4, 'PENDIENTE')
+        RETURNING *
+      `;
+      const cruzadoRes = await client.query(insertCruzadoQuery, [
+        atencion_id, derivar_a.area_destino, derivar_a.prioridad || 'NORMAL', derivar_a.motivo_derivacion.trim()
+      ]);
+      derivacionSaliente = cruzadoRes.rows[0];
+    } else {
+      // Si no deriva a otra área, finalizar la atención clínica
+      await client.query("UPDATE atenciones_clinicas SET estado = 'FINALIZADA' WHERE id = $1", [atencion_id]);
+    }
+
+    // F. Incrementar bitácora de productividad diaria del psicólogo (+1)
+    const upsertBitacoraQuery = `
+      INSERT INTO bitacora_productividad_diaria (usuario_id, unidad_medica_id, fecha, total_atenciones)
+      VALUES ($1, $2, CURRENT_DATE, 1)
+      ON CONFLICT (usuario_id, fecha)
+      DO UPDATE SET total_atenciones = bitacora_productividad_diaria.total_atenciones + 1
+    `;
+    await client.query(upsertBitacoraQuery, [psicologoId, unidadMedicaId]);
 
     await client.query('COMMIT');
 
     res.status(201).json({
-      mensaje: 'Consulta psicológica y consentimiento informado registrados exitosamente.',
-      consulta_id: consultaId,
-      consulta_psicologia_id: consultaPsicoId,
-      consentimiento_id: consentimientoId,
-      estado_atencion: 'FINALIZADA'
+      message: 'Nota terapéutica de psicología registrada bajo estricta confidencialidad (NOM-004 / LGPDPPSO)',
+      consulta: {
+        ...consultaBase,
+        detalle_psicologia: consultaPsico,
+        consentimiento_informado: consentGuardado
+      },
+      interconsulta_atendida: !!tratamiento_cruzado_id,
+      derivacion_generada: derivacionSaliente
     });
-  } catch (error) {
+  } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: 'Error al registrar consulta psicológica: ' + error.message });
+    res.status(500).json({ error: 'Error al registrar sesión psicológica: ' + err.message });
   } finally {
     client.release();
-  }
-});
-
-// 3. GET /api/psicologia/consulta/:id (Lectura integral del expediente)
-router.get('/consulta/:id', authenticateToken, async (req, res) => {
-  try {
-    const consultaRes = await db.query(`
-      SELECT cb.id as consulta_id, cb.fecha_hora, cb.motivo_consulta, cb.observaciones,
-             cp.evaluacion_clinica, cp.nota_evolucion, cp.plan_intervencion,
-             u.nombre as psicologo_nombre, u.apellidos as psicologo_apellidos,
-             ci.id as consentimiento_id, ci.grupo_edad, ci.firmado as consentimiento_firmado,
-             ci.fecha_firma, ci.texto_legal,
-             p.nombres as paciente_nombres, p.apellido_paterno as paciente_apellido_paterno, p.numero_expediente
-      FROM consultas_base cb
-      JOIN consultas_psicologia cp ON cp.consulta_id = cb.id
-      JOIN usuarios u ON u.id = cb.especialista_id
-      JOIN atenciones_clinicas ac ON ac.id = cb.atencion_id
-      JOIN pacientes p ON p.id = ac.paciente_id
-      LEFT JOIN consentimientos_informados ci ON ci.consulta_id = cb.id
-      WHERE cb.id = $1
-    `, [req.params.id]);
-
-    if (consultaRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Consulta psicológica no encontrada.' });
-    }
-
-    res.json(consultaRes.rows[0]);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
   }
 });
 

@@ -1187,4 +1187,3 @@ router.get('/:id/expediente-completo', async (req, res) => {
 });
 
 module.exports = router;
-
