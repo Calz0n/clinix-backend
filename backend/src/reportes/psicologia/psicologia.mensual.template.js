@@ -13,9 +13,9 @@ const NOMBRES_MESES = [
 
 function renderizarMensualHtml(datos) {
   const { periodo, dias, totales, psicologo = 'Lic. Especialista en Psicología' } = datos;
-  const { anio, mes, total_dias } = periodo;
+  const { anio, unidad_medica, mes, total_dias } = periodo;
   const nombreMes = NOMBRES_MESES[parseInt(mes, 10) - 1] || `MES ${mes}`;
-  const logoHtml = obtenerLogoHtml({ height: 105 });
+  const logoHtml = obtenerLogoHtml({ height: 48, maxWidth: 320 });
 
   return `
   <!DOCTYPE html>
@@ -70,16 +70,21 @@ function renderizarMensualHtml(datos) {
           ${logoHtml}
         </div>
         <div class="header-meta-right">
-          <div class="titulo-reporte-oficial">REPORTE MENSUAL DE PSICOLOGÍA</div>
-          <div style="font-size: 8.5px; font-weight: bold; color: #475569; margin-top: 2px;">
-            DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; COATZACOALCOS
+          <div class="titulo-reporte-oficial">H. AYUNTAMIENTO DE COATZACOALCOS</div>
+          <div class="subtitulo-institucion" style="font-size: 9px; margin-bottom: 2px;">
+            <span>DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; SEDE: <u>${datos.unidad_medica || unidad_medica || 'CLÍNICA MUNICIPAL CENTRAL'}</u></span>
+          </div>
+          <div class="fecha-box-container">
+            <div class="fecha-cell">ÁREA<strong>PSICOLOGÍA</strong></div>
+            <div class="fecha-cell">MES<strong>${nombreMes}</strong></div>
+            <div class="fecha-cell">AÑO<strong>${anio}</strong></div>
           </div>
         </div>
       </div>
 
       <div class="meta-subbar" style="margin-bottom: 6px;">
-        <div><strong>NOMBRE DEL PROFESIONISTA:</strong> <span style="text-decoration: underline; padding-left: 6px;">${psicologo}</span></div>
-        <div><strong>REPORTE MENSUAL:</strong> <span style="font-weight: bold; text-decoration: underline; padding-left: 6px;">${nombreMes} ${anio}</span></div>
+        <div><strong>REPORTE MENSUAL DE PSICOLOGÍA</strong> &bull; <strong>NOMBRE DEL PROFESIONISTA:</strong> <span style="text-decoration: underline; padding-left: 6px;">${psicologo}</span></div>
+        <div><strong>MES/AÑO:</strong> <span style="font-weight: bold; text-decoration: underline; padding-left: 6px;">${nombreMes} ${anio}</span></div>
       </div>
 
       <table class="tabla-oficial tabla-mensual-psico">
@@ -218,7 +223,7 @@ function renderizarMensualHtml(datos) {
 
 function renderizarMensualExcel(datos) {
   const { periodo, dias, totales, psicologo = 'Lic. Especialista en Psicología' } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = NOMBRES_MESES[parseInt(mes, 10) - 1] || `MES ${mes}`;
 
   const tablaHtml = `

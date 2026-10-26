@@ -1,7 +1,7 @@
 // Consultas SQL específicas para el módulo de Enfermería
 // Dirección de Salud Pública Municipal de Coatzacoalcos 2026-2029
 
-async function obtenerDatosDiarios(db, fecha) {
+async function obtenerDatosDiarios(db, fecha, unidadId) {
   const query = `
     SELECT ac.id as atencion_id, ac.tipo_atencion, ac.fecha_hora_ingreso, ac.area_servicio,
            p.id as paciente_id, p.nombres, p.apellido_paterno, p.apellido_materno,
@@ -25,7 +25,13 @@ async function obtenerDatosDiarios(db, fecha) {
     ORDER BY ac.fecha_hora_ingreso ASC
   `;
 
-  const result = await db.query(query, [fecha]);
+  let finalQuery = query;
+  const qParams = [fecha];
+  if (unidadId && parseInt(unidadId, 10) > 0) {
+    qParams.push(parseInt(unidadId, 10));
+    finalQuery = finalQuery.replace('WHERE ', 'WHERE ac.unidad_medica_id = $2 AND ');
+  }
+  const result = await db.query(finalQuery, qParams);
   const hoy = new Date(fecha);
 
   let nombreEnfermero = '';
@@ -109,7 +115,7 @@ async function obtenerDatosDiarios(db, fecha) {
   };
 }
 
-async function obtenerDatosMensuales(db, anio, mes) {
+async function obtenerDatosMensuales(db, anio, mes, unidadId) {
   const totalDias = new Date(anio, mes, 0).getDate();
 
   const query = `

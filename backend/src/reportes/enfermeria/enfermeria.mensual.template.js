@@ -13,9 +13,9 @@ const NOMBRES_MESES = [
 
 function renderizarMensualHtml(datos) {
   const { periodo, dias, totales, enfermero = 'Enf. Personal de Enfermería' } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = NOMBRES_MESES[parseInt(mes, 10) - 1] || `MES ${mes}`;
-  const logoHtml = obtenerLogoHtml({ height: 105 });
+  const logoHtml = obtenerLogoHtml({ height: 48, maxWidth: 320 });
 
   return `
   <!DOCTYPE html>
@@ -37,14 +37,23 @@ function renderizarMensualHtml(datos) {
         text-align: center;
       }
       .rot-th-enf {
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-        white-space: nowrap;
-        font-size: 9px;
-        font-weight: bold;
-        padding: 3px 1px;
-        max-height: 96px;
-        margin: 0 auto;
+        writing-mode: vertical-rl !important;
+        transform: rotate(180deg) !important;
+        white-space: nowrap !important;
+        font-size: 7px !important;
+        line-height: 1.0 !important;
+        letter-spacing: -0.3px !important;
+        max-height: 72px !important;
+        margin: 0 auto !important;
+        overflow: hidden !important;
+        display: block !important;
+      }
+      th.th-rot-header {
+        height: 78px !important;
+        max-height: 78px !important;
+        vertical-align: bottom !important;
+        padding: 1px 0.5px 3px 0.5px !important;
+        overflow: hidden !important;
       }
       .hdr-sec-enf-a {
         background-color: #f1f5f9;
@@ -70,20 +79,21 @@ function renderizarMensualHtml(datos) {
           ${logoHtml}
         </div>
         <div class="header-meta-right">
-          <div class="titulo-reporte-oficial">CONCENTRADO MENSUAL DE ENFERMERÍA</div>
-          <div style="font-size: 9px; font-weight: bold; color: #475569; margin-top: 1px;">
-            DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; COATZACOALCOS
+          <div class="titulo-reporte-oficial">H. AYUNTAMIENTO DE COATZACOALCOS</div>
+          <div class="subtitulo-institucion" style="font-size: 9px; margin-bottom: 2px;">
+            <span>DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; SEDE: <u>${datos.unidad_medica || unidad_medica || 'CLÍNICA MUNICIPAL CENTRAL'}</u></span>
           </div>
-          <div style="display: inline-block; border: 1.5px solid #0f172a; border-radius: 4px; padding: 2px 8px; margin-top: 3px; background-color: #f8fafc;">
-            <span style="font-size: 9.8px; font-weight: bold; color: #64748b;">PERIODO:</span>
-            <strong style="font-size: 8.5px; color: #0f172a; margin-left: 4px;">${nombreMes} ${anio}</strong>
+          <div class="fecha-box-container">
+            <div class="fecha-cell">ÁREA<strong>ENFERMERÍA</strong></div>
+            <div class="fecha-cell">MES<strong>${nombreMes}</strong></div>
+            <div class="fecha-cell">AÑO<strong>${anio}</strong></div>
           </div>
         </div>
       </div>
 
       <div class="meta-subbar" style="margin-bottom: 4px;">
-        <div><strong>Nombre del enfermero (a):</strong> <span style="text-decoration: underline; padding-left: 6px;">${enfermero}</span></div>
-        <div><strong>Total Atenciones en el Mes:</strong> <strong>${totales.total_dia || 0}</strong></div>
+        <div><strong>CONCENTRADO MENSUAL DE ENFERMERÍA</strong> &bull; <strong>ENFERMERO (A):</strong> <span style="text-decoration: underline; padding-left: 6px;">${enfermero}</span></div>
+        <div><strong>TOTAL ATENCIONES EN EL MES:</strong> <strong>${totales.total_dia || 0}</strong></div>
       </div>
 
       <table class="tabla-oficial tabla-m-enf">
@@ -92,12 +102,12 @@ function renderizarMensualHtml(datos) {
             <th rowspan="2" style="width: 18px;">No.</th>
             <th rowspan="2" style="width: 50px;">FECHA</th>
             <th colspan="2" style="width: 40px;">SEXO</th>
-            <th rowspan="2" style="width: 32px;"><div class="rot-th-enf">T/A</div></th>
-            <th rowspan="2" style="width: 34px;"><div class="rot-th-enf">GLUCOSA</div></th>
-            <th rowspan="2" style="width: 28px;"><div class="rot-th-enf">FC</div></th>
-            <th rowspan="2" style="width: 28px;"><div class="rot-th-enf">FR</div></th>
-            <th rowspan="2" style="width: 32px;"><div class="rot-th-enf">TEMPERATURA</div></th>
-            <th rowspan="2" style="width: 32px;"><div class="rot-th-enf">SAT DE O2</div></th>
+            <th class=\"th-rot-header\" rowspan="2" style="width: 32px;"><div class="rot-th-enf">T/A</div></th>
+            <th class=\"th-rot-header\" rowspan="2" style="width: 34px;"><div class="rot-th-enf">GLUCOSA</div></th>
+            <th class=\"th-rot-header\" rowspan="2" style="width: 28px;"><div class="rot-th-enf">FC</div></th>
+            <th class=\"th-rot-header\" rowspan="2" style="width: 28px;"><div class="rot-th-enf">FR</div></th>
+            <th class=\"th-rot-header\" rowspan="2" style="width: 32px;"><div class="rot-th-enf">TEMPERATURA</div></th>
+            <th class=\"th-rot-header\" rowspan="2" style="width: 32px;"><div class="rot-th-enf">SAT DE O2</div></th>
             <th colspan="2" class="hdr-sec-enf-a">SOMATOMETRÍA</th>
             <th colspan="2" class="hdr-sec-enf-b">DETECCIONES</th>
             <th colspan="8" class="hdr-sec-enf-a">OTROS SERVICIOS</th>
@@ -106,20 +116,20 @@ function renderizarMensualHtml(datos) {
             <th style="width: 20px;">F</th>
             <th style="width: 20px;">M</th>
             <!-- Somatometría -->
-            <th style="width: 30px;"><div class="rot-th-enf">PESO</div></th>
-            <th style="width: 30px;"><div class="rot-th-enf">TALLA</div></th>
+            <th class=\"th-rot-header\" style="width: 30px;"><div class="rot-th-enf">PESO</div></th>
+            <th class=\"th-rot-header\" style="width: 30px;"><div class="rot-th-enf">TALLA</div></th>
             <!-- Detecciones -->
-            <th style="width: 30px;"><div class="rot-th-enf">HAS</div></th>
-            <th style="width: 30px;"><div class="rot-th-enf">DM</div></th>
+            <th class=\"th-rot-header\" style="width: 30px;"><div class="rot-th-enf">HAS</div></th>
+            <th class=\"th-rot-header\" style="width: 30px;"><div class="rot-th-enf">DM</div></th>
             <!-- Otros Servicios -->
-            <th style="width: 34px;"><div class="rot-th-enf">RETIRO DE PUNTOS</div></th>
-            <th style="width: 34px;"><div class="rot-th-enf">INYECCIONES</div></th>
-            <th style="width: 34px;"><div class="rot-th-enf">CURACIONES</div></th>
-            <th style="width: 34px;"><div class="rot-th-enf">NEBULIZACIONES</div></th>
-            <th style="width: 34px;"><div class="rot-th-enf">PRUEBAS RÁPIDAS</div></th>
-            <th style="width: 34px;"><div class="rot-th-enf">EXP. MAMA</div></th>
-            <th style="width: 34px;"><div class="rot-th-enf">JORNADAS</div></th>
-            <th style="width: 30px;"><div class="rot-th-enf">OTROS</div></th>
+            <th class=\"th-rot-header\" style="width: 34px;"><div class="rot-th-enf">RETIRO PUNTOS</div></th>
+            <th class=\"th-rot-header\" style="width: 34px;"><div class="rot-th-enf">INYECCIONES</div></th>
+            <th class=\"th-rot-header\" style="width: 34px;"><div class="rot-th-enf">CURACIONES</div></th>
+            <th class=\"th-rot-header\" style="width: 34px;"><div class="rot-th-enf">NEBULIZACIONES</div></th>
+            <th class=\"th-rot-header\" style="width: 34px;"><div class="rot-th-enf">PRUEBAS RÁPIDAS</div></th>
+            <th class=\"th-rot-header\" style="width: 34px;"><div class="rot-th-enf">EXP. MAMA</div></th>
+            <th class=\"th-rot-header\" style="width: 34px;"><div class="rot-th-enf">JORNADAS</div></th>
+            <th class=\"th-rot-header\" style="width: 30px;"><div class="rot-th-enf">OTROS</div></th>
           </tr>
         </thead>
         <tbody>
@@ -185,7 +195,7 @@ function renderizarMensualHtml(datos) {
 
 function renderizarMensualExcel(datos) {
   const { periodo, dias, totales, enfermero = 'Enf. Personal de Enfermería' } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = NOMBRES_MESES[parseInt(mes, 10) - 1] || `MES ${mes}`;
 
   const tablaHtml = `

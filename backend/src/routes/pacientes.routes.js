@@ -20,12 +20,33 @@ function calcularEdad(fechaNacimiento) {
   return edad;
 }
 
-// 1. GET /api/pacientes (Búsqueda indexada por CURP, Folio o Nombre - RF-01)
+// 1. GET /api/pacientes (Paginación estricta de 10 registros sin filtro restrictivo de turno/fecha)
 router.get('/', async (req, res) => {
   const { q } = req.query;
+  const limite = 10;
+  const pagina = Math.max(1, parseInt(req.query.pagina, 10) || 1);
+  const offset = (pagina - 1) * limite;
 
   try {
-    let query = `
+    let whereClause = '';
+    const params = [];
+
+    if (q && q.trim() !== '') {
+      params.push(`%${q.trim()}%`);
+      whereClause = `
+        WHERE p.curp ILIKE $1 
+           OR p.numero_expediente ILIKE $1 
+           OR (p.nombres || ' ' || p.apellido_paterno || ' ' || COALESCE(p.apellido_materno, '')) ILIKE $1
+      `;
+    }
+
+    const totalQuery = `SELECT COUNT(*) FROM pacientes p ${whereClause}`;
+    const totalResult = await db.query(totalQuery, params);
+    const totalRegistros = parseInt(totalResult.rows[0].count, 10);
+    const totalPaginas = Math.ceil(totalRegistros / limite);
+
+    const dataParams = [...params, limite, offset];
+    const query = `
       SELECT p.id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
              p.fecha_nacimiento, p.sexo, p.calle_numero, p.colonia, p.codigo_postal, p.telefono,
              p.derechohabiencia, p.estado_civil, p.escolaridad, p.enfermedades_previas, p.fecha_registro,
@@ -43,23 +64,12 @@ router.get('/', async (req, res) => {
         ORDER BY fecha_hora_ingreso DESC
         LIMIT 1
       ) a ON TRUE
+      ${whereClause}
+      ORDER BY p.fecha_registro DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
     `;
-    const params = [];
 
-    if (q && q.trim() !== '') {
-      query += `
-        WHERE p.curp ILIKE $1 
-           OR p.numero_expediente ILIKE $1 
-           OR (p.nombres || ' ' || p.apellido_paterno || ' ' || COALESCE(p.apellido_materno, '')) ILIKE $1
-        ORDER BY p.fecha_registro DESC
-        LIMIT 20
-      `;
-      params.push(`%${q.trim()}%`);
-    } else {
-      query += ` ORDER BY p.fecha_registro DESC LIMIT 20`;
-    }
-
-    const result = await db.query(query, params);
+    const result = await db.query(query, dataParams);
 
     const pacientes = result.rows.map(pac => {
       const edad = calcularEdad(pac.fecha_nacimiento);
@@ -70,9 +80,17 @@ router.get('/', async (req, res) => {
       };
     });
 
-    res.json(pacientes);
+    res.json({
+      datos: pacientes,
+      paginacion: {
+        paginaActual: pagina,
+        totalPaginas,
+        totalRegistros,
+        limitePorPagina: limite
+      }
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Error al buscar pacientes: ' + err.message });
+    res.status(500).json({ error: 'Error al consultar pacientes: ' + err.message });
   }
 });
 
@@ -525,7 +543,7 @@ router.get('/:id/historia-clinica', async (req, res) => {
   const { id } = req.params;
 
   try {
-    const pacienteRes = await db.query('SELECT id, sexo, fecha_nacimiento FROM pacientes WHERE id = ', [id]);
+    const pacienteRes = await db.query('SELECT id, sexo, fecha_nacimiento FROM pacientes WHERE id = $1', [id]);
     if (pacienteRes.rows.length === 0) {
       return res.status(404).json({ error: 'Paciente no encontrado.' });
     }
@@ -538,7 +556,7 @@ router.get('/:id/historia-clinica', async (req, res) => {
              u.cedula_profesional as usuario_cedula
       FROM historias_clinicas hc
       LEFT JOIN usuarios u ON hc.usuario_registro_id = u.id
-      WHERE hc.paciente_id = 
+      WHERE hc.paciente_id = $1
     `, [id]);
 
     if (hcRes.rows.length === 0) {
@@ -621,7 +639,7 @@ router.put(
     const { id } = req.params;
 
     try {
-      const pacRes = await db.query('SELECT id, sexo FROM pacientes WHERE id = ', [id]);
+      const pacRes = await db.query('SELECT id, sexo FROM pacientes WHERE id = $1', [id]);
       if (pacRes.rows.length === 0) {
         return res.status(404).json({ error: 'Paciente no encontrado.' });
       }
@@ -700,13 +718,13 @@ router.put(
           ago_menarca, ago_ritmo_menstrual, ago_fum, ago_gestas, ago_partos, ago_cesareas, ago_abortos,
           ago_metodo_anticonceptivo, ago_papanicolaou_fecha, ago_mastografia_fecha, ago_observaciones
         ) VALUES (
-          , , CURRENT_TIMESTAMP,
-          , , , , , , ,
-          0, 1, 2, 3, 4, 5, 6,
-          7, 8, 9, 0, 1,
-          2, 3, 4, 5,
-          6, 7, 8, 9, 0, 1, 2,
-          3, 4, 5, 6
+          $1, $2, CURRENT_TIMESTAMP,
+          $3, $4, $5, $6, $7, $8, $9,
+          $10, $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21,
+          $22, $23, $24, $25,
+          $26, $27, $28, $29, $30, $31, $32,
+          $33, $34, $35, $36
         )
         ON CONFLICT (paciente_id)
         DO UPDATE SET
@@ -768,7 +786,7 @@ router.put(
           app_cronico_degenerativas ? `Crónicas: ${app_cronico_degenerativas}` : null,
           app_alergias ? `Alergias: ${app_alergias}` : null
         ].filter(Boolean).join(' | ');
-        await db.query('UPDATE pacientes SET enfermedades_previas =  WHERE id = ', [resumenPrevio, id]);
+        await db.query('UPDATE pacientes SET enfermedades_previas = $1 WHERE id = $2', [resumenPrevio, id]);
       }
 
       res.json({
@@ -796,7 +814,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       FROM pacientes p
       JOIN unidades_medicas um ON p.unidad_medica_id = um.id
       LEFT JOIN tutores t ON p.id = t.paciente_id
-      WHERE p.id = 
+      WHERE p.id = $1
     `, [id]);
 
     if (pacRes.rows.length === 0) {
@@ -814,7 +832,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
              u.cedula_profesional as profesional_cedula
       FROM historias_clinicas hc
       LEFT JOIN usuarios u ON hc.usuario_registro_id = u.id
-      WHERE hc.paciente_id = 
+      WHERE hc.paciente_id = $1
     `, [id]);
 
     const hc = hcRes.rows.length > 0 ? hcRes.rows[0] : null;
@@ -825,7 +843,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
              u.nombre || ' ' || u.apellidos as recepcionista_nombre
       FROM atenciones_clinicas a
       JOIN usuarios u ON a.usuario_recepcion_id = u.id
-      WHERE a.paciente_id = 
+      WHERE a.paciente_id = $1
       ORDER BY a.fecha_hora_ingreso DESC
     `, [id]);
 
@@ -844,7 +862,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
                u.cedula_profesional as enfermero_cedula
         FROM triaje_signos_vitales t
         JOIN usuarios u ON t.enfermero_id = u.id
-        WHERE t.atencion_id = ANY(::int[])
+        WHERE t.atencion_id = ANY($1::int[])
       `, [atencionesIds]);
 
       for (const t of triajesRes.rows) {
@@ -866,7 +884,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       if (triajeIds.length > 0) {
         const procRes = await db.query(`
           SELECT p.* FROM procedimientos_enfermeria p
-          WHERE p.triaje_id = ANY(::int[])
+          WHERE p.triaje_id = ANY($1::int[])
         `, [triajeIds]);
 
         for (const p of procRes.rows) {
@@ -883,7 +901,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
                u.cedula_profesional as especialista_cedula
         FROM consultas_base c
         JOIN usuarios u ON c.especialista_id = u.id
-        WHERE c.atencion_id = ANY(::int[])
+        WHERE c.atencion_id = ANY($1::int[])
         ORDER BY c.fecha_hora ASC
       `, [atencionesIds]);
 
@@ -893,7 +911,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       let medGenMap = {};
       if (consultaIds.length > 0) {
         const medRes = await db.query(`
-          SELECT * FROM consultas_medicina_general WHERE consulta_id = ANY(::int[])
+          SELECT * FROM consultas_medicina_general WHERE consulta_id = ANY($1::int[])
         `, [consultaIds]);
         for (const m of medRes.rows) medGenMap[m.consulta_id] = m;
       }
@@ -903,7 +921,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       let odontologiaIds = [];
       if (consultaIds.length > 0) {
         const odoRes = await db.query(`
-          SELECT * FROM consultas_odontologia WHERE consulta_id = ANY(::int[])
+          SELECT * FROM consultas_odontologia WHERE consulta_id = ANY($1::int[])
         `, [consultaIds]);
         for (const o of odoRes.rows) {
           odontoMap[o.consulta_id] = o;
@@ -915,7 +933,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       let piezasMap = {};
       if (odontologiaIds.length > 0) {
         const piezasRes = await db.query(`
-          SELECT * FROM piezas_dentales WHERE consulta_odontologia_id = ANY(::int[]) ORDER BY numero_fdi ASC
+          SELECT * FROM piezas_dentales WHERE consulta_odontologia_id = ANY($1::int[]) ORDER BY numero_fdi ASC
         `, [odontologiaIds]);
         for (const pz of piezasRes.rows) {
           if (!piezasMap[pz.consulta_odontologia_id]) piezasMap[pz.consulta_odontologia_id] = [];
@@ -927,7 +945,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       let nutriMap = {};
       if (consultaIds.length > 0) {
         const nutRes = await db.query(`
-          SELECT * FROM consultas_nutricion WHERE consulta_id = ANY(::int[])
+          SELECT * FROM consultas_nutricion WHERE consulta_id = ANY($1::int[])
         `, [consultaIds]);
         for (const n of nutRes.rows) nutriMap[n.consulta_id] = n;
       }
@@ -936,7 +954,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       let psicoMap = {};
       if (consultaIds.length > 0) {
         const psiRes = await db.query(`
-          SELECT * FROM consultas_psicologia WHERE consulta_id = ANY(::int[])
+          SELECT * FROM consultas_psicologia WHERE consulta_id = ANY($1::int[])
         `, [consultaIds]);
         for (const ps of psiRes.rows) psicoMap[ps.consulta_id] = ps;
       }
@@ -945,7 +963,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       let consentimientosMap = {};
       if (consultaIds.length > 0) {
         const consRes = await db.query(`
-          SELECT * FROM consentimientos_informados WHERE consulta_id = ANY(::int[])
+          SELECT * FROM consentimientos_informados WHERE consulta_id = ANY($1::int[])
         `, [consultaIds]);
         for (const ci of consRes.rows) consentimientosMap[ci.consulta_id] = ci;
       }
@@ -1031,7 +1049,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
       // 4. Derivaciones / Tratamientos Cruzados
       const derRes = await db.query(`
         SELECT * FROM tratamientos_cruzados
-        WHERE atencion_origen_id = ANY(::int[])
+        WHERE atencion_origen_id = ANY($1::int[])
         ORDER BY fecha_hora_derivacion DESC
       `, [atencionesIds]);
 

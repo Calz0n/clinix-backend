@@ -66,6 +66,60 @@ router.get('/pendientes', requireRoles('MEDICO_GENERAL', 'ODONTOLOGO', 'NUTRIOLO
   }
 });
 
+// 2.1 GET /api/consultas/atendidos-hoy (Pacientes atendidos en medicina general hoy por turno)
+router.get('/atendidos-hoy', requireRoles('MEDICO_GENERAL', 'DIRECCION'), async (req, res) => {
+  try {
+    const { turno } = req.query;
+    let turnoCondition = '';
+    if (turno) {
+      const tLower = turno.toLowerCase();
+      if (tLower.includes('mat')) {
+        turnoCondition = ' AND EXTRACT(HOUR FROM cb.fecha_hora) >= 7 AND EXTRACT(HOUR FROM cb.fecha_hora) < 14';
+      } else if (tLower.includes('vesp')) {
+        turnoCondition = ' AND EXTRACT(HOUR FROM cb.fecha_hora) >= 14 AND EXTRACT(HOUR FROM cb.fecha_hora) < 22';
+      }
+    }
+
+    const query = `
+      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
+             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
+             p.fecha_nacimiento, p.sexo, p.derechohabiencia, p.enfermedades_previas,
+             t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
+             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
+             cb.id as consulta_id, cb.fecha_hora as consulta_fecha_hora, cb.motivo_consulta, cb.observaciones,
+             cm.diagnostico_cie10, cm.diagnostico_descripcion, cm.clasificacion_morbilidad,
+             cm.nota_subjetivo, cm.nota_objetivo, cm.nota_analisis, cm.nota_plan,
+             u.nombre || ' ' || u.apellidos as especialista_nombre
+      FROM atenciones_clinicas a
+      JOIN pacientes p ON a.paciente_id = p.id
+      JOIN consultas_base cb ON a.id = cb.atencion_id
+      LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
+      LEFT JOIN consultas_medicina_general cm ON cb.id = cm.consulta_id
+      LEFT JOIN usuarios u ON cb.especialista_id = u.id
+      WHERE a.estado = 'FINALIZADA'
+        AND cb.area_medica = 'MEDICINA_GENERAL'
+        AND cb.fecha_hora >= CURRENT_DATE AND cb.fecha_hora < (CURRENT_DATE + INTERVAL '1 day')
+        ${turnoCondition}
+      ORDER BY cb.fecha_hora DESC
+    `;
+    const result = await db.query(query);
+
+    const hoy = new Date();
+    const lista = result.rows.map(row => {
+      const nac = new Date(row.fecha_nacimiento);
+      let edad = hoy.getFullYear() - nac.getFullYear();
+      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+        edad--;
+      }
+      return { ...row, edad, es_menor: edad < 18 };
+    });
+
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar atendidos de medicina general: ' + err.message });
+  }
+});
+
 // 3. GET /api/consultas/historial/:paciente_id (Historial clínico acumulado de notas médicas anteriores)
 router.get('/historial/:paciente_id', async (req, res) => {
   const { paciente_id } = req.params;

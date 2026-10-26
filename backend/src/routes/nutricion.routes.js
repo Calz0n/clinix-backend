@@ -5,31 +5,42 @@ const { authenticateToken, requireRoles } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticateToken);
 
-// Función auxiliar para determinar z-score y percentil estimado OMS según IMC y edad
-function calcularMetricasOMS(edad, sexo, imc, peso, talla) {
-  // Rango de edad OMS
+// Función asíncrona que consulta la tabla normativa oms_referencia_imc en PostgreSQL para calcular Z-score y percentil OMS
+async function calcularMetricasOMS(queryRunner, edad, sexo, imc, peso, talla) {
   const rango_edad_oms = edad <= 5 ? '2_A_5_ANOS' : '5_A_19_ANOS';
-  
-  // Puntuación Z aproximada para IMC infantil según tablas de referencia de la OMS
-  // Para niños de 7 años, la mediana OMS es aprox 15.5 kg/m2 con DE de 1.5
-  const medianaIMC = edad === 7 ? 15.5 : (14.0 + (edad * 0.3));
-  const desvEstandar = 1.6;
+  const sexoNorm = (sexo === 'F' || sexo === 'Fem.' || sexo === 'Femenino') ? 'F' : 'M';
+
+  let medianaIMC = 14.0 + (edad * 0.3);
+  let desvEstandar = 1.6;
+
+  try {
+    const refRes = await queryRunner.query(
+      'SELECT * FROM oms_referencia_imc WHERE sexo = $1 ORDER BY ABS(edad - $2) ASC LIMIT 1',
+      [sexoNorm, Math.max(5, Math.min(19, edad))]
+    );
+    if (refRes.rows.length > 0) {
+      const r = refRes.rows[0];
+      medianaIMC = parseFloat(r.mediana);
+      desvEstandar = Math.max(0.5, imc >= medianaIMC
+        ? parseFloat(r.sd_mas_1) - medianaIMC
+        : medianaIMC - parseFloat(r.sd_menos_1));
+    }
+  } catch (_) {}
+
   const zscore_imc_edad = parseFloat(((imc - medianaIMC) / desvEstandar).toFixed(2));
-  
-  // Mediana de peso y talla
-  const medianaPeso = edad === 7 ? 23.0 : (10.0 + (edad * 2.2));
+  const medianaPeso = 10.0 + (edad * 2.2);
   const zscore_peso_edad = parseFloat(((peso - medianaPeso) / 3.0).toFixed(2));
-  
-  const medianaTalla = edad === 7 ? 1.22 : (0.85 + (edad * 0.05));
+  const medianaTalla = 0.85 + (edad * 0.05);
   const zscore_talla_edad = parseFloat(((talla - medianaTalla) / 0.06).toFixed(2));
 
-  // Estimación de percentil a partir del Z-score
   let percentil = 50;
-  if (zscore_imc_edad <= -2) percentil = 3;
+  if (zscore_imc_edad <= -3) percentil = 1;
+  else if (zscore_imc_edad <= -2) percentil = 3;
   else if (zscore_imc_edad <= -1) percentil = 15;
   else if (zscore_imc_edad < 1) percentil = 50;
   else if (zscore_imc_edad < 2) percentil = 85;
-  else percentil = 97;
+  else if (zscore_imc_edad < 3) percentil = 97;
+  else percentil = 99;
 
   return {
     rango_edad_oms,
@@ -39,6 +50,130 @@ function calcularMetricasOMS(edad, sexo, imc, peso, talla) {
     percentil_calculado: percentil
   };
 }
+
+// GET /api/nutricion/oms-referencia (Consulta SQL de curvas normativas OMS 5-19 años desde PostgreSQL)
+router.get('/oms-referencia', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT edad, sexo, sd_menos_3, sd_menos_2, sd_menos_1, mediana, sd_mas_1, sd_mas_2, sd_mas_3 FROM oms_referencia_imc ORDER BY sexo ASC, edad ASC'
+    );
+    const ninas = {};
+    const ninos = {};
+    for (const row of result.rows) {
+      const item = {
+        edad: Number(row.edad),
+        sdMenos3: Number(row.sd_menos_3),
+        sdMenos2: Number(row.sd_menos_2),
+        sdMenos1: Number(row.sd_menos_1),
+        mediana: Number(row.mediana),
+        sdMas1: Number(row.sd_mas_1),
+        sdMas2: Number(row.sd_mas_2),
+        sdMas3: Number(row.sd_mas_3),
+      };
+      if (row.sexo === 'F') {
+        ninas[row.edad] = item;
+      } else {
+        ninos[row.edad] = item;
+      }
+    }
+    res.json({ ninas, ninos, total_registros: result.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar tablas de referencia OMS en base de datos: ' + err.message });
+  }
+});
+
+
+// 0. GET /api/nutricion/pendientes (Cola de pacientes en espera de consulta de nutrición hoy)
+router.get('/pendientes', async (req, res) => {
+  try {
+    const query = `
+      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
+             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
+             p.fecha_nacimiento, p.sexo, p.derechohabiencia, p.enfermedades_previas,
+             t.id as triaje_id, t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
+             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
+             t.clasificacion_imc, t.detecciones_riesgo,
+             tut.nombre_completo as tutor_nombre, tut.parentesco as tutor_parentesco, tut.telefono_contacto as tutor_telefono
+      FROM atenciones_clinicas a
+      JOIN pacientes p ON a.paciente_id = p.id
+      LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
+      LEFT JOIN tutores tut ON p.id = tut.paciente_id
+      WHERE a.estado = 'EN_CONSULTA'
+        AND (a.area_servicio ILIKE '%NUTRI%' OR a.area_servicio IS NULL)
+        AND a.fecha_hora_ingreso >= CURRENT_DATE AND a.fecha_hora_ingreso < (CURRENT_DATE + INTERVAL '1 day')
+      ORDER BY a.fecha_hora_ingreso ASC
+    `;
+    const result = await db.query(query);
+
+    const hoy = new Date();
+    const lista = result.rows.map(row => {
+      const nac = new Date(row.fecha_nacimiento);
+      let edad = hoy.getFullYear() - nac.getFullYear();
+      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+        edad--;
+      }
+      return { ...row, edad, es_menor: edad < 18 };
+    });
+
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar lista de espera de nutrición: ' + err.message });
+  }
+});
+
+// 0.1 GET /api/nutricion/atendidos-hoy (Pacientes atendidos en nutrición hoy por turno)
+router.get('/atendidos-hoy', async (req, res) => {
+  try {
+    const { turno } = req.query;
+    let turnoCondition = '';
+    if (turno) {
+      const tLower = turno.toLowerCase();
+      if (tLower.includes('mat')) {
+        turnoCondition = ' AND EXTRACT(HOUR FROM cb.fecha_hora) >= 7 AND EXTRACT(HOUR FROM cb.fecha_hora) < 14';
+      } else if (tLower.includes('vesp')) {
+        turnoCondition = ' AND EXTRACT(HOUR FROM cb.fecha_hora) >= 14 AND EXTRACT(HOUR FROM cb.fecha_hora) < 22';
+      }
+    }
+
+    const query = `
+      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
+             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
+             p.fecha_nacimiento, p.sexo, p.derechohabiencia, p.enfermedades_previas,
+             t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
+             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
+             cb.id as consulta_id, cb.fecha_hora as consulta_fecha_hora, cb.motivo_consulta, cb.observaciones,
+             cn.circunferencia_cintura, cn.circunferencia_cadera, cn.circunferencia_brazo,
+             cn.porcentaje_grasa, cn.porcentaje_musculo, cn.consumo_agua_litros, cn.frecuencia_ejercicio, cn.recordatorio_24h,
+             u.nombre || ' ' || u.apellidos as especialista_nombre
+      FROM atenciones_clinicas a
+      JOIN pacientes p ON a.paciente_id = p.id
+      JOIN consultas_base cb ON a.id = cb.atencion_id
+      LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
+      LEFT JOIN consultas_nutricion cn ON cb.id = cn.consulta_id
+      LEFT JOIN usuarios u ON cb.especialista_id = u.id
+      WHERE a.estado = 'FINALIZADA'
+        AND cb.area_medica = 'NUTRICION'
+        AND cb.fecha_hora >= CURRENT_DATE AND cb.fecha_hora < (CURRENT_DATE + INTERVAL '1 day')
+        ${turnoCondition}
+      ORDER BY cb.fecha_hora DESC
+    `;
+    const result = await db.query(query);
+
+    const hoy = new Date();
+    const lista = result.rows.map(row => {
+      const nac = new Date(row.fecha_nacimiento);
+      let edad = hoy.getFullYear() - nac.getFullYear();
+      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+        edad--;
+      }
+      return { ...row, edad, es_menor: edad < 18 };
+    });
+
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar atendidos de nutrición: ' + err.message });
+  }
+});
 
 // 1. GET /api/nutricion/interconsultas (Pacientes derivados por Medicina General vía Tratamiento Cruzado)
 router.get('/interconsultas', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
@@ -201,7 +336,8 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     // 4. Si el paciente es menor de 19 años, calcular y almacenar Curvas de Crecimiento OMS (RF-05)
     let curvaOMSGuardada = null;
     if (edad <= 19 && pacienteInfo.peso_kg && pacienteInfo.talla_metros && pacienteInfo.imc) {
-      const metricas = calcularMetricasOMS(
+      const metricas = await calcularMetricasOMS(
+        client,
         edad,
         pacienteInfo.sexo,
         parseFloat(pacienteInfo.imc),
@@ -222,6 +358,9 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
       ]);
       curvaOMSGuardada = curvaRes.rows[0];
     }
+
+    // 5.1 Finalizar la atención clínica para que no siga en lista de espera
+    await client.query("UPDATE atenciones_clinicas SET estado = 'FINALIZADA' WHERE id = $1", [atencion_id]);
 
     // 5. Si venía de un tratamiento cruzado, actualizarlo a ATENDIDO
     if (tratamiento_cruzado_id) {

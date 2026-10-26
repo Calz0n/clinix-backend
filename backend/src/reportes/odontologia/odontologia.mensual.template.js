@@ -10,9 +10,9 @@ const MESES = ['', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO
 
 function renderizarMensualHtml(datos) {
   const { periodo, dias, totales, total_general_mes } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = MESES[parseInt(mes, 10)] || `MES ${mes}`;
-  const logoHtml = obtenerLogoHtml({ height: 105 });
+  const logoHtml = obtenerLogoHtml({ height: 48, maxWidth: 320 });
 
   return `
   <!DOCTYPE html>
@@ -55,7 +55,9 @@ function renderizarMensualHtml(datos) {
         </div>
         <div class="header-meta-right">
           <div class="titulo-reporte-oficial">CONCENTRADO MENSUAL DE ODONTOLOGÍA</div>
-          <div class="subtitulo-institucion">GOBIERNO DE LA CIUDAD DE COATZACOALCOS &bull; SALUD PÚBLICA MUNICIPAL</div>
+          <div class="subtitulo-institucion" style="font-size: 9px; margin-bottom: 2px;">
+            <span>DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; SEDE: <u>${datos.unidad_medica || unidad_medica || 'CLÍNICA MUNICIPAL CENTRAL'}</u></span>
+          </div>
           <div class="fecha-box-container">
             <div class="fecha-cell">ÁREA<strong>ODONTOLOGÍA</strong></div>
             <div class="fecha-cell">MES<strong>${nombreMes}</strong></div>
@@ -80,32 +82,32 @@ function renderizarMensualHtml(datos) {
           </tr>
           <tr>
             <!-- Detecciones (10) -->
-            <th style="width: 32px;"><div class="rot-col-mensual">ABSCESO PERIODONTAL</div></th>
-            <th style="width: 26px;"><div class="rot-col-mensual">CARIES</div></th>
-            <th style="width: 28px;"><div class="rot-col-mensual">GINGIVITIS</div></th>
-            <th style="width: 30px;"><div class="rot-col-mensual">PERIODONTITIS</div></th>
-            <th style="width: 30px;"><div class="rot-col-mensual">ABRASIÓN DENTAL</div></th>
-            <th style="width: 28px;"><div class="rot-col-mensual">BRUXISMO</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">TÉCNICA DE CEPILLADO</div></th>
-            <th style="width: 30px;"><div class="rot-col-mensual">USO DE HILO DENTAL</div></th>
-            <th style="width: 30px;"><div class="rot-col-mensual">DETECCIÓN DE PLACA</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">APLICACIÓN DE FLÚOR</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">ABSCESO PERIODONTAL</div></th>
+            <th class="th-rot-col" style="width: 26px;"><div class="rot-col-mensual">CARIES</div></th>
+            <th class="th-rot-col" style="width: 28px;"><div class="rot-col-mensual">GINGIVITIS</div></th>
+            <th class="th-rot-col" style="width: 30px;"><div class="rot-col-mensual">PERIODONTITIS</div></th>
+            <th class="th-rot-col" style="width: 30px;"><div class="rot-col-mensual">ABRASIÓN DENTAL</div></th>
+            <th class="th-rot-col" style="width: 28px;"><div class="rot-col-mensual">BRUXISMO</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">TÉCNICA DE CEPILLADO</div></th>
+            <th class="th-rot-col" style="width: 30px;"><div class="rot-col-mensual">USO DE HILO DENTAL</div></th>
+            <th class="th-rot-col" style="width: 30px;"><div class="rot-col-mensual">DETECCIÓN DE PLACA</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">APLICACIÓN DE FLÚOR</div></th>
 
             <!-- Tratamiento (7) -->
-            <th style="width: 30px;"><div class="rot-col-mensual">PROFILAXIS</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">CURETAJE PERIAPICAL</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">FARMACOTERAPIA</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">DESENSIBILIZANTE</div></th>
-            <th style="width: 28px;"><div class="rot-col-mensual">AMALGAMA</div></th>
-            <th style="width: 26px;"><div class="rot-col-mensual">RESINA</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">EXTRACCIÓN DENTAL</div></th>
+            <th class="th-rot-col" style="width: 30px;"><div class="rot-col-mensual">PROFILAXIS</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">CURETAJE PERIAPICAL</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">FARMACOTERAPIA</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">DESENSIBILIZANTE</div></th>
+            <th class="th-rot-col" style="width: 28px;"><div class="rot-col-mensual">AMALGAMA</div></th>
+            <th class="th-rot-col" style="width: 26px;"><div class="rot-col-mensual">RESINA</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">EXTRACCIÓN DENTAL</div></th>
 
             <!-- Gabinete (5) -->
-            <th style="width: 34px;"><div class="rot-col-mensual">BIOMETRÍA HEMÁTICA</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">TIEMPO COAGULACIÓN</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">PRUEBAS RÁPIDAS</div></th>
-            <th style="width: 34px;"><div class="rot-col-mensual">RAD. PANORÁMICA</div></th>
-            <th style="width: 32px;"><div class="rot-col-mensual">RAD. PERIAPICAL</div></th>
+            <th class="th-rot-col" style="width: 34px;"><div class="rot-col-mensual">BIOMETRÍA HEMÁTICA</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">TIEMPO COAGULACIÓN</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">PRUEBAS RÁPIDAS</div></th>
+            <th class="th-rot-col" style="width: 34px;"><div class="rot-col-mensual">RAD. PANORÁMICA</div></th>
+            <th class="th-rot-col" style="width: 32px;"><div class="rot-col-mensual">RAD. PERIAPICAL</div></th>
           </tr>
         </thead>
         <tbody>
@@ -177,7 +179,7 @@ function renderizarMensualHtml(datos) {
 
 function renderizarMensualExcel(datos) {
   const { periodo, dias, totales, total_general_mes } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = MESES[parseInt(mes, 10)] || `MES ${mes}`;
 
   const tablaHtml = `

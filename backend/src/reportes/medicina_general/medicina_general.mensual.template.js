@@ -16,9 +16,9 @@ const NOMBRES_MESES = [
 
 function renderizarMensualHtml(datos) {
   const { periodo, dias, totales, medico = 'Dr. Especialista en Medicina General' } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = NOMBRES_MESES[parseInt(mes, 10) - 1] || `MES ${mes}`;
-  const logoHtml = obtenerLogoHtml({ height: 105 });
+  const logoHtml = obtenerLogoHtml({ height: 48, maxWidth: 320 });
 
   return `
   <!DOCTYPE html>
@@ -35,13 +35,13 @@ function renderizarMensualHtml(datos) {
         vertical-align: bottom;
       }
       .tabla-m-mg td {
-        font-size: 10.5px; font-weight: bold;
-        height: 17px;
+        font-size: 9.5px; font-weight: bold;
+        height: 14.5px;
         padding: 1px 0.5px;
         text-align: center;
       }
       .th-rot-col {
-        height: 100px;
+        height: 75px;
         vertical-align: bottom !important;
         padding: 2px 1px !important;
         overflow: hidden;
@@ -53,7 +53,7 @@ function renderizarMensualHtml(datos) {
         font-size: 9px;
         font-weight: bold;
         line-height: 1.0;
-        max-height: 96px;
+        max-height: 70px;
         margin: 0 auto;
         text-align: left;
         overflow: hidden;
@@ -80,20 +80,25 @@ function renderizarMensualHtml(datos) {
     <!-- HOJA 1: RESUMEN TOTAL MENSUAL MÉDICOS     -->
     <!-- ========================================== -->
     <div class="pagina-reporte">
-      <div class="header-institucional">
+            <div class="header-institucional">
         <div class="header-brand">
           ${logoHtml}
         </div>
         <div class="header-meta-right">
-          <div class="titulo-reporte-oficial">RESUMEN TOTAL MENSUAL MÉDICOS</div>
-          <div style="font-size: 8px; font-weight: bold; color: #475569; margin-top: 1px;">
-            H. AYUNTAMIENTO DE COATZACOALCOS &bull; DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL
+          <div class="titulo-reporte-oficial">H. AYUNTAMIENTO DE COATZACOALCOS</div>
+          <div class="subtitulo-institucion" style="font-size: 9px; margin-bottom: 2px;">
+            <span>DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; SEDE: <u>${datos.unidad_medica || unidad_medica || 'CLÍNICA MUNICIPAL CENTRAL'}</u></span>
+          </div>
+          <div class="fecha-box-container">
+            <div class="fecha-cell">ÁREA<strong>MEDICINA GENERAL</strong></div>
+            <div class="fecha-cell">MES<strong>${nombreMes}</strong></div>
+            <div class="fecha-cell">AÑO<strong>${anio}</strong></div>
           </div>
         </div>
       </div>
 
       <div class="meta-subbar" style="margin-bottom: 4px;">
-        <div><strong>MÉDICO:</strong> <span style="text-decoration: underline; padding-left: 6px;">${medico}</span></div>
+        <div><strong>HOJA 1 DE 3:</strong> RESUMEN TOTAL MENSUAL MÉDICOS &bull; <strong>MÉDICO:</strong> <span style="text-decoration: underline; padding-left: 6px;">${medico}</span></div>
         <div><strong>MES/AÑO:</strong> <span style="font-weight: bold; text-decoration: underline; padding-left: 6px;">${nombreMes} ${anio}</span></div>
       </div>
 
@@ -120,7 +125,7 @@ function renderizarMensualHtml(datos) {
             <th rowspan="2" class="th-rot-col"><div class="rot-th-mg">OTRAS<br>ENFERMEDADES</div></th>
             <th rowspan="2" class="th-rot-col"><div class="rot-th-mg">CERTIFICADO<br>MÉDICO</div></th>
           </tr>
-          <tr style="height: 100px;">
+          <tr style="height: 75px;">
             <!-- Pob Sub -->
             <th class="th-rot-col"><div class="rot-th-mg">F</div></th>
             <th class="th-rot-col"><div class="rot-th-mg">M</div></th>
@@ -194,20 +199,23 @@ function renderizarMensualHtml(datos) {
     <!-- HOJA 2: PADECIMIENTOS DE PRIMERA VEZ       -->
     <!-- ========================================== -->
     <div class="pagina-reporte" style="page-break-before: always;">
-      <div class="header-institucional">
+            <div class="header-institucional">
         <div class="header-brand">
           ${logoHtml}
         </div>
         <div class="header-meta-right">
-          <div class="titulo-reporte-oficial">PADECIMIENTOS DE PRIMERA VEZ</div>
-          <div style="font-size: 8px; font-weight: bold; color: #475569; margin-top: 1px;">
-            H. AYUNTAMIENTO DE COATZACOALCOS &bull; DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL
+          <div class="titulo-reporte-oficial">H. AYUNTAMIENTO DE COATZACOALCOS</div>
+          <div class="subtitulo-institucion">DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL</div>
+          <div class="fecha-box-container">
+            <div class="fecha-cell">ÁREA<strong>MEDICINA GENERAL</strong></div>
+            <div class="fecha-cell">MES<strong>${nombreMes}</strong></div>
+            <div class="fecha-cell">AÑO<strong>${anio}</strong></div>
           </div>
         </div>
       </div>
 
       <div class="meta-subbar" style="margin-bottom: 4px;">
-        <div><strong>MÉDICO:</strong> <span style="text-decoration: underline; padding-left: 6px;">${medico}</span></div>
+        <div><strong>HOJA 2 DE 3:</strong> PADECIMIENTOS DE PRIMERA VEZ &bull; <strong>MÉDICO:</strong> <span style="text-decoration: underline; padding-left: 6px;">${medico}</span></div>
         <div><strong>MES/AÑO:</strong> <span style="font-weight: bold; text-decoration: underline; padding-left: 6px;">${nombreMes} ${anio}</span></div>
       </div>
 
@@ -220,7 +228,7 @@ function renderizarMensualHtml(datos) {
             <th colspan="3" class="hdr-sec-b">ENFERM. GINE</th>
             <th colspan="18" class="hdr-sec-a">OTRAS ENFERMEDADES</th>
           </tr>
-          <tr style="height: 100px;">
+          <tr style="height: 75px;">
             <!-- ETS (12) -->
             <th class="th-rot-col"><div class="rot-th-mg">GARDNERELLA<br>VAGINALIS</div></th>
             <th class="th-rot-col"><div class="rot-th-mg">CANDIDIASIS<br>VAGINAL</div></th>
@@ -349,20 +357,23 @@ function renderizarMensualHtml(datos) {
     <!-- HOJA 3: MEDIDAS PREVENTIVAS               -->
     <!-- ========================================== -->
     <div class="pagina-reporte" style="page-break-before: always;">
-      <div class="header-institucional">
+            <div class="header-institucional">
         <div class="header-brand">
           ${logoHtml}
         </div>
         <div class="header-meta-right">
-          <div class="titulo-reporte-oficial">MEDIDAS PREVENTIVAS</div>
-          <div style="font-size: 8px; font-weight: bold; color: #475569; margin-top: 1px;">
-            H. AYUNTAMIENTO DE COATZACOALCOS &bull; DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL
+          <div class="titulo-reporte-oficial">H. AYUNTAMIENTO DE COATZACOALCOS</div>
+          <div class="subtitulo-institucion">DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL</div>
+          <div class="fecha-box-container">
+            <div class="fecha-cell">ÁREA<strong>MEDICINA GENERAL</strong></div>
+            <div class="fecha-cell">MES<strong>${nombreMes}</strong></div>
+            <div class="fecha-cell">AÑO<strong>${anio}</strong></div>
           </div>
         </div>
       </div>
 
       <div class="meta-subbar" style="margin-bottom: 4px;">
-        <div><strong>MÉDICO:</strong> <span style="text-decoration: underline; padding-left: 6px;">${medico}</span></div>
+        <div><strong>HOJA 3 DE 3:</strong> MEDIDAS PREVENTIVAS &bull; <strong>MÉDICO:</strong> <span style="text-decoration: underline; padding-left: 6px;">${medico}</span></div>
         <div><strong>MES/AÑO:</strong> <span style="font-weight: bold; text-decoration: underline; padding-left: 6px;">${nombreMes} ${anio}</span></div>
       </div>
 
@@ -376,7 +387,7 @@ function renderizarMensualHtml(datos) {
             <th colspan="4" class="hdr-sec-a">PRESERVATIVOS</th>
             <th colspan="6" class="hdr-sec-b">ESTUDIOS DE GABINETES (LAB. EN SANGRE)</th>
           </tr>
-          <tr style="height: 100px;">
+          <tr style="height: 75px;">
             <!-- Detecciones (6) -->
             <th class="th-rot-col"><div class="rot-th-mg">DETECCIÓN<br>OPORTUNA CACU</div></th>
             <th class="th-rot-col"><div class="rot-th-mg">DETECCIÓN CA<br>DE MAMA</div></th>
@@ -476,7 +487,7 @@ function renderizarMensualHtml(datos) {
 
 function renderizarMensualExcel(datos) {
   const { periodo, dias, totales, medico = 'Dr. Especialista en Medicina General' } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = NOMBRES_MESES[parseInt(mes, 10) - 1] || `MES ${mes}`;
 
   const tablaHtml = `

@@ -63,21 +63,37 @@ function evaluarSemaforoTriaje(ta, fc, fr, temp, satO2) {
 }
 
 
-// 2.1 GET /api/triaje/atendidos-hoy (Pacientes con triaje completado hoy)
+// 2.1 GET /api/triaje/atendidos-hoy (Pacientes con triaje completado HOY y filtrado por TURNO)
 router.get('/atendidos-hoy', authenticateToken, requireRoles('ENFERMERIA', 'RECEPCION', 'DIRECCION', 'MEDICO_GENERAL', 'ADMIN'), async (req, res) => {
   try {
+    const { turno } = req.query;
+
+    let turnoCondition = '';
+    if (turno) {
+      const tLower = turno.toLowerCase();
+      if (tLower.includes('mat')) {
+        // Turno Matutino: 07:00 a 13:59
+        turnoCondition = ' AND EXTRACT(HOUR FROM t.fecha_hora) >= 7 AND EXTRACT(HOUR FROM t.fecha_hora) < 14';
+      } else if (tLower.includes('vesp')) {
+        // Turno Vespertino: 14:00 a 21:59
+        turnoCondition = ' AND EXTRACT(HOUR FROM t.fecha_hora) >= 14 AND EXTRACT(HOUR FROM t.fecha_hora) < 22';
+      }
+    }
+
     const query = `
       SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
              p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
              p.fecha_nacimiento, p.sexo, p.enfermedades_previas,
              t.id as triaje_id, t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
              t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
-             t.clasificacion_imc, t.fecha_hora as triaje_fecha_hora,
+             t.clasificacion_imc, t.detecciones_riesgo, t.fecha_hora as triaje_fecha_hora,
              tut.nombre_completo as tutor_nombre, tut.parentesco as tutor_parentesco, tut.telefono_contacto as tutor_telefono
       FROM triaje_signos_vitales t
       JOIN atenciones_clinicas a ON t.atencion_id = a.id
       JOIN pacientes p ON a.paciente_id = p.id
       LEFT JOIN tutores tut ON p.id = tut.paciente_id
+      WHERE t.fecha_hora >= CURRENT_DATE AND t.fecha_hora < (CURRENT_DATE + INTERVAL '1 day')
+      ${turnoCondition}
       ORDER BY t.fecha_hora DESC
       LIMIT 100
     `;
@@ -184,6 +200,7 @@ router.get('/pendientes', authenticateToken, requireRoles('ENFERMERIA', 'RECEPCI
       JOIN pacientes p ON a.paciente_id = p.id
       LEFT JOIN tutores t ON p.id = t.paciente_id
       WHERE a.estado = 'TRIAJE'
+        AND a.fecha_hora_ingreso >= CURRENT_DATE AND a.fecha_hora_ingreso < (CURRENT_DATE + INTERVAL '1 day')
       ORDER BY a.fecha_hora_ingreso ASC
       LIMIT 50
     `;

@@ -2,13 +2,14 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
-const { authenticateToken, requireRoles } = require('../middleware/auth');
+const { authenticateToken, requireRoles, createRateLimiter } = require('../middleware/auth');
+const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, message: 'Demasiados intentos de inicio de sesión. Intente en 15 minutos.' });
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'clinix_jwt_secret_coatzacoalcos_2026';
 
 // POST /api/auth/register (Registro de usuarios con password hasheada en Bcrypt)
-router.post('/register', async (req, res) => {
+router.post('/register', authenticateToken, requireRoles('DIRECCION'), async (req, res) => {
   const {
     unidad_medica_id,
     nombre,
@@ -59,23 +60,22 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login (Inicio de sesión con validación Bcrypt y generación de JWT)
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Correo y contraseña son obligatorios.' });
+    return res.status(400).json({ error: 'Correo electrónico y contraseña requeridos.' });
   }
 
   try {
-    // 1. Buscar usuario activo por email
+    // 1. Buscar usuario activo por correo
     const query = `
-      SELECT u.id, u.unidad_medica_id, u.nombre, u.apellidos, u.email, u.password_hash, u.rol, u.cedula_profesional, u.activo,
-             m.nombre as unidad_medica_nombre
+      SELECT u.*, um.nombre as unidad_medica_nombre
       FROM usuarios u
-      JOIN unidades_medicas m ON u.unidad_medica_id = m.id
-      WHERE u.email = $1
+      LEFT JOIN unidades_medicas um ON u.unidad_medica_id = um.id
+      WHERE LOWER(u.email) = LOWER($1)
     `;
-    const result = await db.query(query, [email.toLowerCase().trim()]);
+    const result = await db.query(query, [email.trim()]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Credenciales inválidas.' });
@@ -115,7 +115,13 @@ router.post('/login', async (req, res) => {
       user: payload
     });
   } catch (err) {
-    res.status(500).json({ error: 'Error durante el inicio de sesión: ' + err.message });
+    console.error('[AUTH LOGIN ERROR]', err);
+    if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT') {
+      return res.status(503).json({
+        error: 'El servicio de base de datos no está disponible en este momento. Por favor contacte al administrador.'
+      });
+    }
+    res.status(500).json({ error: 'No fue posible iniciar sesión en este momento. Por favor intente más tarde.' });
   }
 });
 
@@ -133,5 +139,23 @@ router.get('/admin-only', authenticateToken, requireRoles('DIRECCION'), (req, re
     user: req.user
   });
 });
+
+// =========================================================================
+// RUTAS PÚBLICAS DE ACTIVACIÓN Y RECUPERACIÓN (NOM-004-SSA3-2012 / LGPDPPSO)
+// =========================================================================
+const medicosController = require('../controllers/medicosController');
+
+// GET /api/auth/validar-token-activacion?token=...
+router.get('/validar-token-activacion', medicosController.validarToken);
+
+// POST /api/auth/activar-cuenta (Recibe token y nueva contraseña)
+router.post('/activar-cuenta', medicosController.activarCuenta);
+
+// POST /api/auth/recuperar-password y /api/auth/olvide-password (Solicitud de recuperación por correo)
+router.post('/recuperar-password', medicosController.solicitarRecuperacionPassword);
+router.post('/olvide-password', medicosController.solicitarRecuperacionPassword);
+
+// POST /api/auth/restablecer-password (Establecer nueva contraseña tras olvido)
+router.post('/restablecer-password', medicosController.activarCuenta);
 
 module.exports = router;

@@ -10,9 +10,9 @@ const MESES = ['', 'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO
 
 function renderizarMensualHtml(datos) {
   const { periodo, hoja1, hoja2, hoja3, total_general_mes } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = MESES[parseInt(mes, 10)] || `MES ${mes}`;
-  const logoHtml = obtenerLogoHtml({ height: 105 });
+  const logoHtml = obtenerLogoHtml({ height: 48, maxWidth: 320 });
 
   return `
   <!DOCTYPE html>
@@ -61,7 +61,9 @@ function renderizarMensualHtml(datos) {
         </div>
         <div class="header-meta-right">
           <div class="titulo-reporte-oficial">H. AYUNTAMIENTO DE COATZACOALCOS</div>
-          <div class="subtitulo-institucion">DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL</div>
+          <div class="subtitulo-institucion" style="font-size: 9px; margin-bottom: 2px;">
+            <span>DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; SEDE: <u>${datos.unidad_medica || unidad_medica || 'CLÍNICA MUNICIPAL CENTRAL'}</u></span>
+          </div>
           <div class="fecha-box-container">
             <div class="fecha-cell">ÁREA<strong>NUTRICIÓN</strong></div>
             <div class="fecha-cell">MES<strong>${nombreMes}</strong></div>
@@ -383,7 +385,7 @@ function renderizarMensualHtml(datos) {
 
 function renderizarMensualExcel(datos) {
   const { periodo, hoja1, hoja2, hoja3, total_general_mes } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = MESES[parseInt(mes, 10)] || `MES ${mes}`;
 
   const tablasHtml = `

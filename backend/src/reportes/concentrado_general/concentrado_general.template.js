@@ -13,9 +13,9 @@ const NOMBRES_MESES = [
 
 function renderizarMensualHtml(datos) {
   const { periodo, dias, totales, resumen_ejecutivo } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = NOMBRES_MESES[parseInt(mes, 10) - 1] || `MES ${mes}`;
-  const logoHtml = obtenerLogoHtml({ height: 105 });
+  const logoHtml = obtenerLogoHtml({ height: 48, maxWidth: 320 });
 
   return `
   <!DOCTYPE html>
@@ -36,15 +36,27 @@ function renderizarMensualHtml(datos) {
         padding: 1px 1px;
         text-align: center;
       }
+      th.th-rot-col {
+        height: 80px !important;
+        max-height: 80px !important;
+        vertical-align: bottom !important;
+        padding: 1px 0.5px 3px 0.5px !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+      }
       .rot-th-gen {
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-        white-space: nowrap;
-        font-size: 9px;
-        font-weight: bold;
-        padding: 3px 1px;
-        max-height: 96px;
-        margin: 0 auto;
+        writing-mode: vertical-rl !important;
+        transform: rotate(180deg) !important;
+        white-space: nowrap !important;
+        font-size: 7.2px !important;
+        line-height: 1.0 !important;
+        letter-spacing: -0.2px !important;
+        max-height: 72px !important;
+        margin: 0 auto !important;
+        display: block !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        box-sizing: border-box !important;
       }
       .hdr-sec-gen {
         background-color: #f1f5f9;
@@ -62,8 +74,8 @@ function renderizarMensualHtml(datos) {
         border-bottom: 2px solid #0f172a;
       }
       .th-total-col {
-        background-color: #0f172a !important;
-        color: #ffffff !important;
+        background-color: #f1f5f9 !important;
+        color: #000000 !important;
         font-weight: bold;
       }
       .cards-ejecutivas {
@@ -110,13 +122,14 @@ function renderizarMensualHtml(datos) {
           ${logoHtml}
         </div>
         <div class="header-meta-right">
-          <div class="titulo-reporte-oficial">CONCENTRADO GENERAL MENSUAL</div>
-          <div style="font-size: 8.5px; font-weight: bold; color: #475569; margin-top: 1px;">
-            DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; COATZACOALCOS
+          <div class="titulo-reporte-oficial">H. AYUNTAMIENTO DE COATZACOALCOS</div>
+          <div class="subtitulo-institucion" style="font-size: 9px; margin-bottom: 2px;">
+            <span>DIRECCIÓN DE SALUD PÚBLICA MUNICIPAL &bull; SEDE: <u>${datos.unidad_medica || unidad_medica || 'CLÍNICA MUNICIPAL CENTRAL'}</u></span>
           </div>
-          <div style="display: inline-block; border: 1.5px solid #0f172a; border-radius: 4px; padding: 2px 8px; margin-top: 2px; background-color: #f8fafc;">
-            <span style="font-size: 9.8px; font-weight: bold; color: #64748b;">PERIODO:</span>
-            <strong style="font-size: 8.5px; color: #0f172a; margin-left: 4px;">${nombreMes} ${anio}</strong>
+          <div class="fecha-box-container">
+            <div class="fecha-cell">ÁREA<strong>CONCENTRADO GENERAL</strong></div>
+            <div class="fecha-cell">MES<strong>${nombreMes}</strong></div>
+            <div class="fecha-cell">AÑO<strong>${anio}</strong></div>
           </div>
         </div>
       </div>
@@ -165,21 +178,21 @@ function renderizarMensualHtml(datos) {
             <th colspan="4">ACCIONES DE IMPACTO</th>
           </tr>
           <tr>
-            <th class="rot-th-gen">FEMENINO</th>
-            <th class="rot-th-gen">MASCULINO</th>
-            <th class="rot-th-gen">1RA VEZ</th>
-            <th class="rot-th-gen">SUBSECUENTE</th>
-            <th class="rot-th-gen">ABIERTA</th>
-            <th class="rot-th-gen">CAUTIVA</th>
-            <th class="rot-th-gen">MEDICINA GENERAL</th>
-            <th class="rot-th-gen">TRIAJE Y ENFERMERÍA</th>
-            <th class="rot-th-gen">ODONTOLOGÍA</th>
-            <th class="rot-th-gen">NUTRICIÓN</th>
-            <th class="rot-th-gen">PSICOLOGÍA</th>
-            <th class="rot-th-gen">DETECCIÓN RIESGO</th>
-            <th class="rot-th-gen">PROCEDIMIENTOS</th>
-            <th class="rot-th-gen">CANALIZACIONES</th>
-            <th class="rot-th-gen">CERTIFICADOS</th>
+            <th class="th-rot-col"><div class="rot-th-gen">FEMENINO</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">MASCULINO</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">1RA VEZ</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">SUBSECUENTE</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">ABIERTA</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">CAUTIVA</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">MEDICINA GENERAL</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">TRIAJE Y ENFERMERÍA</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">ODONTOLOGÍA</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">NUTRICIÓN</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">PSICOLOGÍA</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">DETECCIÓN RIESGO</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">PROCEDIMIENTOS</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">CANALIZACIONES</div></th>
+            <th class="th-rot-col"><div class="rot-th-gen">CERTIFICADOS</div></th>
           </tr>
         </thead>
         <tbody>
@@ -225,7 +238,7 @@ function renderizarMensualHtml(datos) {
             <td><strong>${totales.procedimientos || 0}</strong></td>
             <td><strong>${totales.canalizaciones || 0}</strong></td>
             <td><strong>${totales.certificados || 0}</strong></td>
-            <td style="background-color: #0f172a; color: #ffffff;"><strong>${totales.total_dia || 0}</strong></td>
+            <td style="background-color: #e2e8f0; color: #000000;"><strong>${totales.total_dia || 0}</strong></td>
           </tr>
         </tbody>
       </table>
@@ -237,7 +250,7 @@ function renderizarMensualHtml(datos) {
 
 function renderizarMensualExcel(datos) {
   const { periodo, dias, totales, resumen_ejecutivo } = datos;
-  const { anio, mes } = periodo;
+  const { anio, unidad_medica, mes } = periodo;
   const nombreMes = NOMBRES_MESES[parseInt(mes, 10) - 1] || `MES ${mes}`;
 
   const tablaHtml = `

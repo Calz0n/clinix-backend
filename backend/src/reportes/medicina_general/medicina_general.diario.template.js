@@ -7,9 +7,9 @@ const estilosPrint = require('../common/estilosPrint');
 const { envolverHtmlParaExcel } = require('../common/excelWrapper');
 
 function renderizarDiarioHtml(datos) {
-  const { fecha, medico, pacientes, total_pacientes } = datos;
+  const { fecha, unidad_medica, medico, pacientes, total_pacientes } = datos;
   const [anio, mes, dia] = fecha.split('-');
-  const logoHtml = obtenerLogoHtml({ height: 105 });
+  const logoHtml = obtenerLogoHtml({ height: 48, maxWidth: 320 });
 
   // Rellenar hasta 15 filas mínimas como en el formato impreso oficial
   const filasCompletas = [...pacientes];
@@ -96,9 +96,16 @@ function renderizarDiarioHtml(datos) {
         </div>
       </div>
 
-      <div class="meta-subbar" style="margin-bottom: 4px;">
-        <div><strong>Nombre del Dr. (a):</strong> <span style="text-decoration: underline; padding-left: 6px;">${medico}</span></div>
-        <div><strong>Total Pacientes Atendidos:</strong> <strong>${total_pacientes}</strong></div>
+      <div class="meta-subbar" style="margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between; font-size: 9.5px; font-weight: bold;">
+        <div style="flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px;">
+          <strong>Sede / Clínica:</strong> <span style="text-decoration: underline; padding-left: 4px;">${unidad_medica || 'Clínica Municipal Central'}</span>
+        </div>
+        <div style="flex: 1; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px;">
+          <strong>Nombre del Dr. (a):</strong> <span style="text-decoration: underline; padding-left: 4px;">${medico}</span>
+        </div>
+        <div style="flex: 0 0 auto; text-align: right; white-space: nowrap;">
+          <strong>Total Pacientes:</strong> <strong style="padding-left: 3px;">${total_pacientes}</strong>
+        </div>
       </div>
 
       <table class="tabla-oficial tabla-hd-medicina">
@@ -196,7 +203,7 @@ function renderizarDiarioHtml(datos) {
 }
 
 function renderizarDiarioExcel(datos) {
-  const { fecha, medico, pacientes, total_pacientes } = datos;
+  const { fecha, unidad_medica, medico, pacientes, total_pacientes } = datos;
   const [anio, mes, dia] = fecha.split('-');
 
   const filasCompletas = [...pacientes];

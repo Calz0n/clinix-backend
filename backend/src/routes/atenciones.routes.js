@@ -6,9 +6,9 @@ const router = express.Router();
 
 router.use(authenticateToken);
 
-// 1. POST /api/atenciones (Registrar visita de paciente existente -> Subsecuente a Triaje)
+// 1. POST /api/atenciones (Registrar visita de paciente -> Canalización a Triaje)
 router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
-  const { paciente_id } = req.body;
+  const { paciente_id, area_servicio, area, tipo_atencion, tipo_consulta } = req.body;
 
   if (!paciente_id) {
     return res.status(400).json({ error: 'El ID del paciente es obligatorio.' });
@@ -16,6 +16,11 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
 
   const unidadMedicaId = req.user.unidad_medica_id || 1;
   const usuarioRecepcionId = req.user.id;
+
+  const areaFinal = (area_servicio || area || 'Medicina General').trim();
+  const tipoFinal = (tipo_atencion === 'PRIMERA_VEZ' || tipo_consulta === 'Primera vez' || tipo_atencion === '1ª vez')
+    ? 'PRIMERA_VEZ'
+    : 'SUBSECUENTE';
 
   try {
     // Verificar que el paciente exista
@@ -26,27 +31,38 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
 
     // Verificar si el paciente ya tiene una atención activa en el día de hoy (que no esté FINALIZADA)
     const activaRes = await db.query(`
-      SELECT id, estado, fecha_hora_ingreso 
+      SELECT id, estado, fecha_hora_ingreso, area_servicio
       FROM atenciones_clinicas 
-      WHERE paciente_id = $1 AND estado != 'FINALIZADA' AND DATE(fecha_hora_ingreso) = CURRENT_DATE
+      WHERE paciente_id = $1 AND estado != 'FINALIZADA' AND fecha_hora_ingreso >= CURRENT_DATE AND fecha_hora_ingreso < CURRENT_DATE + INTERVAL '1 day'
     `, [paciente_id]);
 
     if (activaRes.rows.length > 0) {
       return res.status(400).json({
-        error: `El paciente ya cuenta con una atención activa en curso hoy (Estado actual: ${activaRes.rows[0].estado}).`
+        error: `El paciente ya cuenta con una atención activa en curso hoy (Estado actual: ${activaRes.rows[0].estado}, Área: ${activaRes.rows[0].area_servicio || 'General'}).`
       });
     }
 
-    // Insertar nueva visita como subsecuente
-    const insertQuery = `
-      INSERT INTO atenciones_clinicas (paciente_id, unidad_medica_id, usuario_recepcion_id, tipo_atencion, estado)
-      VALUES ($1, $2, $3, 'SUBSECUENTE', 'TRIAJE')
-      RETURNING *
-    `;
-    const result = await db.query(insertQuery, [paciente_id, unidadMedicaId, usuarioRecepcionId]);
+    const client = await db.pool.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
+      const insertQuery = `
+        INSERT INTO atenciones_clinicas (paciente_id, unidad_medica_id, usuario_recepcion_id, tipo_atencion, area_servicio, estado)
+        VALUES ($1, $2, $3, $4, $5, 'TRIAJE')
+        RETURNING *
+      `;
+      result = await client.query(insertQuery, [paciente_id, unidadMedicaId, usuarioRecepcionId, tipoFinal, areaFinal]);
+      await client.query('UPDATE pacientes SET area_servicio = $1 WHERE id = $2', [areaFinal, paciente_id]);
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     res.status(201).json({
-      message: 'Visita subsecuente registrada y canalizada a Triaje',
+      message: 'Visita registrada y canalizada a Triaje exitosamente',
       atencion: result.rows[0],
       paciente: pacienteRes.rows[0]
     });
@@ -57,24 +73,29 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
 
 // 2. GET /api/atenciones/sala-espera (Lista de pacientes en sala de espera en tiempo real)
 router.get('/sala-espera', async (req, res) => {
-  const { estado } = req.query; // Opcional: filtrar por TRIAJE o EN_CONSULTA
+  const { estado, area } = req.query; // Opcional: filtrar por TRIAJE o EN_CONSULTA y área
 
   try {
     let query = `
-      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado,
+      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
              p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
              p.fecha_nacimiento, p.sexo,
              u.nombre || ' ' || u.apellidos as recepcionista_nombre
       FROM atenciones_clinicas a
       JOIN pacientes p ON a.paciente_id = p.id
       JOIN usuarios u ON a.usuario_recepcion_id = u.id
-      WHERE a.estado != 'FINALIZADA' AND DATE(a.fecha_hora_ingreso) = CURRENT_DATE
+      WHERE a.estado != 'FINALIZADA' AND a.fecha_hora_ingreso >= CURRENT_DATE AND a.fecha_hora_ingreso < CURRENT_DATE + INTERVAL '1 day'
     `;
     const params = [];
 
     if (estado) {
-      query += ` AND a.estado = $1`;
       params.push(estado.toUpperCase());
+      query += ` AND a.estado = $${params.length}`;
+    }
+
+    if (area) {
+      params.push(`%${area.trim()}%`);
+      query += ` AND a.area_servicio ILIKE $${params.length}`;
     }
 
     query += ` ORDER BY a.fecha_hora_ingreso ASC`;

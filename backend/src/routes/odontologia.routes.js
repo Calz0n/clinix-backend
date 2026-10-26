@@ -69,6 +69,97 @@ function calcularIndicesBucales(tipo_denticion, piezas) {
   };
 }
 
+// 0. GET /api/odontologia/pendientes (Cola de pacientes en espera de consulta odontológica hoy)
+router.get('/pendientes', async (req, res) => {
+  try {
+    const query = `
+      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
+             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
+             p.fecha_nacimiento, p.sexo, p.derechohabiencia, p.enfermedades_previas,
+             t.id as triaje_id, t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
+             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
+             t.clasificacion_imc, t.detecciones_riesgo,
+             tut.nombre_completo as tutor_nombre, tut.parentesco as tutor_parentesco, tut.telefono_contacto as tutor_telefono
+      FROM atenciones_clinicas a
+      JOIN pacientes p ON a.paciente_id = p.id
+      LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
+      LEFT JOIN tutores tut ON p.id = tut.paciente_id
+      WHERE a.estado = 'EN_CONSULTA'
+        AND (a.area_servicio ILIKE '%ODONT%' OR a.area_servicio IS NULL)
+        AND a.fecha_hora_ingreso >= CURRENT_DATE AND a.fecha_hora_ingreso < (CURRENT_DATE + INTERVAL '1 day')
+      ORDER BY a.fecha_hora_ingreso ASC
+    `;
+    const result = await db.query(query);
+
+    const hoy = new Date();
+    const lista = result.rows.map(row => {
+      const nac = new Date(row.fecha_nacimiento);
+      let edad = hoy.getFullYear() - nac.getFullYear();
+      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+        edad--;
+      }
+      return { ...row, edad, es_menor: edad < 18 };
+    });
+
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar lista de espera de odontología: ' + err.message });
+  }
+});
+
+// 0.1 GET /api/odontologia/atendidos-hoy (Pacientes atendidos en odontología hoy por turno)
+router.get('/atendidos-hoy', async (req, res) => {
+  try {
+    const { turno } = req.query;
+    let turnoCondition = '';
+    if (turno) {
+      const tLower = turno.toLowerCase();
+      if (tLower.includes('mat')) {
+        turnoCondition = ' AND EXTRACT(HOUR FROM cb.fecha_hora) >= 7 AND EXTRACT(HOUR FROM cb.fecha_hora) < 14';
+      } else if (tLower.includes('vesp')) {
+        turnoCondition = ' AND EXTRACT(HOUR FROM cb.fecha_hora) >= 14 AND EXTRACT(HOUR FROM cb.fecha_hora) < 22';
+      }
+    }
+
+    const query = `
+      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
+             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
+             p.fecha_nacimiento, p.sexo, p.derechohabiencia, p.enfermedades_previas,
+             t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
+             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
+             cb.id as consulta_id, cb.fecha_hora as consulta_fecha_hora, cb.motivo_consulta, cb.observaciones,
+             co.tipo_denticion, co.comorbilidades_bucales, co.indice_cpod, co.indice_ceod,
+             u.nombre || ' ' || u.apellidos as especialista_nombre
+      FROM atenciones_clinicas a
+      JOIN pacientes p ON a.paciente_id = p.id
+      JOIN consultas_base cb ON a.id = cb.atencion_id
+      LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
+      LEFT JOIN consultas_odontologia co ON cb.id = co.consulta_id
+      LEFT JOIN usuarios u ON cb.especialista_id = u.id
+      WHERE a.estado = 'FINALIZADA'
+        AND cb.area_medica = 'ODONTOLOGIA'
+        AND cb.fecha_hora >= CURRENT_DATE AND cb.fecha_hora < (CURRENT_DATE + INTERVAL '1 day')
+        ${turnoCondition}
+      ORDER BY cb.fecha_hora DESC
+    `;
+    const result = await db.query(query);
+
+    const hoy = new Date();
+    const lista = result.rows.map(row => {
+      const nac = new Date(row.fecha_nacimiento);
+      let edad = hoy.getFullYear() - nac.getFullYear();
+      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
+        edad--;
+      }
+      return { ...row, edad, es_menor: edad < 18 };
+    });
+
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al consultar atendidos de odontología: ' + err.message });
+  }
+});
+
 // 1. GET /api/odontologia/plantilla-base (Genera plantilla limpia de 32 o 20 dientes lista para Flutter)
 router.get('/plantilla-base', (req, res) => {
   const tipo = (req.query.tipo || 'ADULTA').toUpperCase();
