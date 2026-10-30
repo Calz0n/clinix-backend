@@ -1,3 +1,4 @@
+const { validarAntecedentes, normalizarAntecedentes } = require('../utils/antecedentesNutricion');
 const express = require('express');
 const db = require('../db');
 const { authenticateToken, requireRoles } = require('../middleware/auth');
@@ -143,7 +144,7 @@ router.get('/atendidos-hoy', async (req, res) => {
              t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
              cb.id as consulta_id, cb.fecha_hora as consulta_fecha_hora, cb.motivo_consulta, cb.observaciones,
              cn.circunferencia_cintura, cn.circunferencia_cadera, cn.circunferencia_brazo,
-             cn.porcentaje_grasa, cn.porcentaje_musculo, cn.consumo_agua_litros, cn.frecuencia_ejercicio, cn.recordatorio_24h,
+             cn.porcentaje_grasa, cn.porcentaje_musculo, cn.consumo_agua_litros, cn.frecuencia_ejercicio, cn.recordatorio_24h, cn.antecedentes_patologicos,
              u.nombre || ' ' || u.apellidos as especialista_nombre
       FROM atenciones_clinicas a
       JOIN pacientes p ON a.paciente_id = p.id
@@ -223,10 +224,10 @@ router.get('/historial/:paciente_id', async (req, res) => {
 
   try {
     const query = `
-      SELECT cb.id as consulta_id, cb.fecha_hora, cb.motivo_consulta,
+      SELECT cb.id as consulta_id, cb.atencion_id, cb.fecha_hora, cb.motivo_consulta, cb.observaciones,
              cn.circunferencia_cintura, cn.circunferencia_cadera, cn.circunferencia_brazo,
              cn.porcentaje_grasa, cn.porcentaje_musculo, cn.consumo_agua_litros,
-             cn.frecuencia_ejercicio, cn.recordatorio_24h,
+             cn.frecuencia_ejercicio, cn.recordatorio_24h, cn.antecedentes_patologicos,
              co.rango_edad_oms, co.zscore_peso_edad, co.zscore_talla_edad, co.zscore_imc_edad,
              co.percentil_calculado,
              u.nombre || ' ' || u.apellidos as nutriologo_nombre, u.cedula_profesional as nutriologo_cedula
@@ -236,7 +237,7 @@ router.get('/historial/:paciente_id', async (req, res) => {
       LEFT JOIN consultas_nutricion cn ON cb.id = cn.consulta_id
       LEFT JOIN curvas_crecimiento_oms co ON cn.id = co.consulta_nutricion_id
       WHERE ac.paciente_id = $1 AND cb.area_medica = 'NUTRICION'
-      ORDER BY cb.fecha_hora DESC
+      ORDER BY cb.fecha_hora DESC, cb.id DESC
     `;
     const result = await db.query(query, [paciente_id]);
     res.json(result.rows);
@@ -260,29 +261,35 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     porcentaje_musculo,
     consumo_agua_litros,
     frecuencia_ejercicio,
+    antecedentes_patologicos,
     recordatorio_24h, // Objeto JSONB { desayuno, colacion_mat, comida, colacion_vesp, cena }
     consentimiento // Objeto opcional: { grupo_edad, texto_legal, firmado, tutor_id }
   } = req.body;
 
-  if (!atencion_id || !motivo_consulta) {
+  const errorAntecedentes = validarAntecedentes(antecedentes_patologicos);
+  if (errorAntecedentes) return res.status(400).json({ error: errorAntecedentes });
+
+  if (!Number.isInteger(atencion_id) || atencion_id < 1 || typeof motivo_consulta !== 'string' || !motivo_consulta.trim()) {
     return res.status(400).json({ error: 'La atención médica y el motivo de consulta son obligatorios.' });
   }
 
   const nutriologoId = req.user.id;
   const unidadMedicaId = req.user.unidad_medica_id || 1;
 
-  const client = await db.pool.connect();
+  let client;
   try {
+    client = await db.pool.connect();
     await client.query('BEGIN');
 
     // 1. Obtener datos del paciente y de la atención clínica
     const atencionRes = await client.query(`
-      SELECT a.id, a.paciente_id, p.fecha_nacimiento, p.sexo,
+      SELECT a.id, a.paciente_id, a.estado, p.fecha_nacimiento, p.sexo,
              t.peso_kg, t.talla_metros, t.imc
       FROM atenciones_clinicas a
       JOIN pacientes p ON a.paciente_id = p.id
       LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
       WHERE a.id = $1
+      FOR UPDATE OF a
     `, [atencion_id]);
 
     if (atencionRes.rows.length === 0) {
@@ -291,6 +298,10 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     }
 
     const pacienteInfo = atencionRes.rows[0];
+    if (pacienteInfo.estado === 'FINALIZADA') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Esta atención ya está finalizada. Selecciona una atención pendiente para registrar una nueva evaluación.' });
+    }
 
     // Calcular edad
     const hoy = new Date();
@@ -315,8 +326,8 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     const insertNutriQuery = `
       INSERT INTO consultas_nutricion (
         consulta_id, circunferencia_cintura, circunferencia_cadera, circunferencia_brazo,
-        porcentaje_grasa, porcentaje_musculo, consumo_agua_litros, frecuencia_ejercicio, recordatorio_24h
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        porcentaje_grasa, porcentaje_musculo, consumo_agua_litros, frecuencia_ejercicio, recordatorio_24h, antecedentes_patologicos
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `;
     const nutriValues = [
@@ -328,7 +339,8 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
       porcentaje_musculo ? parseFloat(porcentaje_musculo) : null,
       consumo_agua_litros ? parseFloat(consumo_agua_litros) : null,
       frecuencia_ejercicio ? frecuencia_ejercicio.trim() : null,
-      recordatorio_24h ? JSON.stringify(recordatorio_24h) : null
+      recordatorio_24h ? JSON.stringify(recordatorio_24h) : null,
+      JSON.stringify(normalizarAntecedentes(antecedentes_patologicos))
     ];
     const nutriResult = await client.query(insertNutriQuery, nutriValues);
     const consultaNutri = nutriResult.rows[0];
@@ -410,10 +422,10 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
       interconsulta_atendida: !!tratamiento_cruzado_id
     });
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (client) await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: 'Error al registrar consulta nutricional: ' + err.message });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

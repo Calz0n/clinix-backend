@@ -1,0 +1,12 @@
+[Unit]
+Description=Respaldo diario de Clinix y recuperación de ejecución pendiente
+
+[Timer]
+OnBootSec=3min
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+AccuracySec=1min
+Unit=clinix-backup.service
+
+[Install]
+WantedBy=timers.target

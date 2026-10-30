@@ -4,36 +4,33 @@ const db = require('../db');
 const JWT_SECRET = process.env.JWT_SECRET || 'clinix_jwt_secret_coatzacoalcos_2026';
 
 async function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  let token = null;
-
-  if (authHeader) {
-    token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-  } else if (req.query && req.query.token) {
-    token = req.query.token;
-  }
-
-  if (!token || token.trim() === '') {
+  const authHeader = req.headers.authorization;
+  const rawToken = typeof authHeader === 'string'
+    ? authHeader.replace(/^Bearer\s+/i, '')
+    : req.query?.token;
+  if (typeof rawToken !== 'string' || !rawToken.trim()) {
     return res.status(401).json({ error: 'Acceso denegado: Token de autenticación requerido.' });
   }
-
-  jwt.verify(token.trim(), JWT_SECRET, async (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Token inválido o expirado. Inicia sesión nuevamente.' });
+  let user;
+  try {
+    user = jwt.verify(rawToken.trim(), JWT_SECRET);
+    if (!user || typeof user !== 'object' || !Number.isInteger(Number(user.id)) || Number(user.id) < 1) throw new Error('Usuario no válido');
+  } catch (_) {
+    return res.status(401).json({ error: 'Token inválido o expirado. Inicia sesión nuevamente.' });
+  }
+  try {
+    const result = await db.query('SELECT id, activo, rol, unidad_medica_id FROM usuarios WHERE id = $1', [user.id]);
+    const actual = result.rows[0];
+    if (!actual || !actual.activo) {
+      return res.status(403).json({ error: 'Esta cuenta ha sido desactivada o ya no existe.' });
     }
-
-    try {
-      if (user && user.id) {
-        const uRes = await db.query('SELECT activo, rol FROM usuarios WHERE id = $1', [user.id]);
-        if (uRes.rows.length > 0 && !uRes.rows[0].activo) {
-          return res.status(403).json({ error: 'Esta cuenta ha sido desactivada por la Dirección.' });
-        }
-      }
-    } catch (_) {}
-
-    req.user = user;
+    // Tomar rol y sede actuales, aunque hayan cambiado desde el login.
+    req.user = { ...user, ...actual };
     next();
-  });
+  } catch (err) {
+    console.error('[AUTH DB]', err.message);
+    return res.status(503).json({ error: 'No se pudo verificar la sesión. Intenta nuevamente en unos momentos.' });
+  }
 }
 
 function requireRoles(...allowedRoles) {
@@ -89,7 +86,6 @@ function securityHeadersMiddleware(req, res, next) {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Access-Control-Allow-Private-Network', 'true');
   next();
 }
 

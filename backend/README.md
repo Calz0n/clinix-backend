@@ -1,48 +1,13 @@
-# Clinix Backend API - Actualización Integral (2026-2029)
-Dirección de Salud Pública Municipal de Coatzacoalcos, Ver.
+# Backend Clinix corregido
 
-## 1. Contenido de la Actualización
-Esta entrega complementa y corrige el backend en Node.js/Express y PostgreSQL para soportar al 100% el frontend de Flutter:
+Actualización de Node.js/Express y PostgreSQL para el frontend Flutter adjunto.
 
-1. **Gestión de Personal Clínico (`/api/usuarios`):**
-   - `GET /api/usuarios`: Listado de todo el personal (médicos, odontólogos, nutriólogos, psicólogos, enfermeros, directores) con datos de unidad médica.
-   - `GET /api/usuarios/:id`: Detalle de usuario.
-   - `POST /api/usuarios`: Alta de nuevo profesional con hash de contraseña Bcrypt (cost factor 12).
-   - `PUT /api/usuarios/:id`: Actualización de datos, rol, cédula profesional y clínica asignada.
-   - `PATCH /api/usuarios/:id/status` (y `/estado`): Pausar o reactivar cuenta del profesional.
-   - `DELETE /api/usuarios/:id`: Baja lógica conforme a NOM-004.
+- Instalación: `npm ci`.
+- Migración de una base existente: `npm run migrate`.
+- Arranque: `npm start`. Las migraciones se verifican antes de aceptar peticiones.
+- Pruebas aisladas: `npm test` (instala también dependencias de desarrollo).
+- Contenedor: `podman build -t clinix-backend -f Containerfile .` o su equivalente Docker. Conserva la red y las variables de tu despliegue.
 
-2. **Catálogo de Sedes Médicas (`/api/unidades`):**
-   - `GET /api/unidades`: Consulta de sedes municipales activas (Clínica Central, Villa Allende, Teresa Morales, etc.).
-   - `GET /api/unidades/:id`: Detalle de sede.
-   - `POST /api/unidades` y `PUT /api/unidades/:id`: Gestión administrativa de sedes.
+Lee `../LEEME.md` antes de actualizar el sistema. En ejecución directa, las variables se leen del `.env` de esta carpeta. `DB_HOST=postgres` requiere resolver ese nombre en la red del contenedor; para PostgreSQL local ajusta el host. El servidor usa el puerto `PORT`, con 3000 como valor predeterminado.
 
-3. **Auditoría y Trazabilidad NOM-004 (`/api/auditoria`):**
-   - `GET /api/auditoria/accesos`: Registro de últimos inicios de sesión y accesos al sistema.
-   - `GET /api/auditoria/expedientes`: Bitácora cronológica de consultas y notas médicas firmadas.
-   - `GET /api/auditoria/resumen`: Indicadores de integridad y cumplimiento normativo NOM-004/NOM-024.
-
-4. **Corrección de Placeholders SQL en `pacientes.routes.js`:**
-   - Reparados todos los parámetros rotos en `GET /:id/historia-clinica`, `PUT /:id/historia-clinica` y `GET /:id/expediente-completo`.
-
-5. **Canalización con Especialidad en Recepción (`atenciones.routes.js`):**
-   - `POST /api/atenciones`: Soporta `area_servicio` y `tipo_atencion`.
-
-## 2. Despliegue en Servidor (Podman / Docker)
-
-### Opción A: Descomprimir y reiniciar contenedor
-```bash
-# 1. Descomprimir en la carpeta del backend
-unzip -o backend-completo-actualizado.zip -d /ruta/a/clinix/backend/
-
-# 2. Reconstruir y reiniciar con Podman
-podman build -t clinix-backend -f Containerfile .
-podman stop clinix-backend && podman rm clinix-backend
-podman run -d --name clinix-backend -p 3000:3000 --env-file .env clinix-backend
-```
-
-### Opción B: Ejecución directa con Node.js
-```bash
-npm install
-npm start
-```
+`init_db/04_pacientes_datos_completos.sql` y `init_db/05_antecedentes_nutricion.sql` agregan columnas sin eliminar registros. La migración 06 (`init_db/06_ampliar_campos_pacientes.sql`) amplía las columnas antiguas que sean más estrechas que el contrato actual. No reduce tamaños ni trunca datos. La segunda incorpora `consultas_nutricion.antecedentes_patologicos` para guardar las casillas por evaluación. No crea una base desde cero. Las pruebas usan PGlite y datos sintéticos, sin modificar tu PostgreSQL real.

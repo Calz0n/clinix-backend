@@ -1,0 +1,1 @@
+0 2 * * * /bin/bash /root/clinix/respaldo_clinix.sh >/dev/null 2>&1

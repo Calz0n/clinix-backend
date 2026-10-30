@@ -2,14 +2,17 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const db = require('../db');
+const { authenticateToken, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
+router.use(authenticateToken);
 const nutricionReport = require('../reportes/nutricion');
 const odontologiaReport = require('../reportes/odontologia');
 const psicologiaReport = require('../reportes/psicologia');
 const medicinaGeneralReport = require('../reportes/medicina_general');
 const enfermeriaReport = require('../reportes/enfermeria');
 const concentradoGeneralReport = require('../reportes/concentrado_general');
+const certificadosReport = require('../reportes/certificados');
 const { resolverNombreProfesional, resolverUnidadMedica } = require('../reportes/common/profesionalHelper');
 
 const { obtenerLogoHtml } = require('../reportes/common/logo');
@@ -1202,7 +1205,7 @@ router.get('/mensual/pdf', async (req, res) => {
 
 
 // 7. POST /api/estadisticas/consolidar-mes
-router.post('/consolidar-mes', async (req, res) => {
+router.post('/consolidar-mes', requireRoles('DIRECCION'), async (req, res) => {
   const anio = parseInt(req.body.anio || new Date().getFullYear(), 10);
   const mes = parseInt(req.body.mes || (new Date().getMonth() + 1), 10);
   const unidadMedicaId = 1;
@@ -1338,6 +1341,39 @@ router.get('/consolidado-mensual', async (req, res) => {
     res.json(reporteRes.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+
+// 9. GET /api/estadisticas/certificado/medico/pdf (Formato Oficial 1:1 CM0__--2026 en tamaño Carta)
+router.get('/certificado/medico/pdf', async (req, res) => {
+  try {
+    const datos = { ...req.query };
+    datos.unidad_medica = await resolverUnidadMedica(db, req);
+    if (!datos.medico || !datos.medico.trim()) {
+      datos.medico = await resolverNombreProfesional(db, req, 'MEDICINA_GENERAL');
+    }
+    const html = certificadosReport.renderizarCertificadoMedicoHtml(datos);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (err) {
+    return res.status(500).json({ error: 'Error al generar Certificado Médico Oficial: ' + err.message });
+  }
+});
+
+// 10. GET /api/estadisticas/certificado/nutricion/pdf (Formato Oficial 1:1 CERTIFICADO DE NUTRICIÓN en tamaño Carta)
+router.get('/certificado/nutricion/pdf', async (req, res) => {
+  try {
+    const datos = { ...req.query };
+    datos.unidad_medica = await resolverUnidadMedica(db, req);
+    if (!datos.nutriologo || !datos.nutriologo.trim()) {
+      datos.nutriologo = await resolverNombreProfesional(db, req, 'NUTRICION');
+    }
+    const html = certificadosReport.renderizarCertificadoNutricionHtml(datos);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (err) {
+    return res.status(500).json({ error: 'Error al generar Certificado de Nutrición Oficial: ' + err.message });
   }
 });
 

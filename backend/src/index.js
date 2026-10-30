@@ -1,3 +1,5 @@
+require('dotenv').config();
+const { aplicarMigraciones } = require('./migrations');
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
@@ -24,7 +26,7 @@ const PORT = process.env.PORT || 3000;
 app.disable('x-powered-by');
 app.use(securityHeadersMiddleware);
 app.use(cors({
-  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true,
+  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(value => value.trim()).filter(Boolean) : true,
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
@@ -93,6 +95,7 @@ app.use((err, req, res, next) => {
 // Migraciones automáticas seguras para soporte de Invitaciones, Activación y Tablas Normativas OMS
 async function inicializarMigraciones() {
   try {
+    await aplicarMigraciones(db);
     await db.query(`
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS token_activacion VARCHAR(255);
       ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS token_expiracion TIMESTAMP;
@@ -147,14 +150,19 @@ async function inicializarMigraciones() {
     `);
     console.log('[DB] Migraciones y tablas normativas OMS verificadas exitosamente.');
   } catch (err) {
-    console.warn('[DB WARNING] No se ejecutaron migraciones automáticas:', err.message);
+    console.error('[DB ERROR] No se ejecutaron migraciones automáticas:', err.message);
+    throw err;
   }
 }
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Clinix Backend API escuchando en http://0.0.0.0:${PORT}`);
-  inicializarMigraciones();
-});
+let server;
+async function iniciarServidor() {
+  await inicializarMigraciones();
+  server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Clinix Backend API escuchando en http://0.0.0.0:${PORT}`);
+  });
+  return server;
+}
 
 // Apagado limpio (Graceful Shutdown) ante SIGTERM / SIGINT en Podman
 async function cerrarServidor(signal) {
@@ -167,5 +175,13 @@ async function cerrarServidor(signal) {
   });
 }
 
-process.on('SIGTERM', () => cerrarServidor('SIGTERM'));
-process.on('SIGINT', () => cerrarServidor('SIGINT'));
+if (require.main === module) {
+  iniciarServidor().catch(async () => {
+    await db.pool.end();
+    process.exitCode = 1;
+  });
+  process.on('SIGTERM', () => { if (server) cerrarServidor('SIGTERM'); });
+  process.on('SIGINT', () => { if (server) cerrarServidor('SIGINT'); });
+}
+
+module.exports = { app, inicializarMigraciones, iniciarServidor };

@@ -1,3 +1,6 @@
+const { randomUUID } = require('node:crypto');
+const { validarPaciente } = require('../utils/pacienteValidation');
+const { responderErrorPaciente } = require('../utils/pacienteError');
 const express = require('express');
 const db = require('../db');
 const { authenticateToken, requireRoles } = require('../middleware/auth');
@@ -54,7 +57,7 @@ router.get('/', async (req, res) => {
              COALESCE(p.area_servicio, 'Medicina General') as area,
              COALESCE(a.tipo_atencion, 'PRIMERA_VEZ') as tipo_atencion,
              t.id as tutor_id, t.nombre_completo as tutor_nombre, t.parentesco as tutor_parentesco,
-             t.telefono_contacto as tutor_telefono, t.tipo_identificacion as tutor_tipo_id
+             t.telefono_contacto as tutor_telefono, t.tipo_identificacion as tutor_tipo_id, t.numero_identificacion as tutor_num_id
       FROM pacientes p
       LEFT JOIN tutores t ON p.id = t.paciente_id
       LEFT JOIN LATERAL (
@@ -144,6 +147,9 @@ router.get('/:id', async (req, res) => {
 
 // 3. POST /api/pacientes (Alta con candado estricto para menores de 18 años)
 router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
+  const errorValidacion = validarPaciente(req.body);
+  if (errorValidacion) return res.status(400).json({ error: errorValidacion });
+
   const {
     numero_expediente,
     nombres,
@@ -153,7 +159,8 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
     fecha_nacimiento,
     sexo,
     estado_civil,
-    escolaridad,
+    escolaridad, numero_afiliacion, grupo_sanguineo, religion, ocupacion, tipo_poblacion,
+    area, area_servicio, tipo_consulta, tipo_atencion,
     calle_numero,
     colonia,
     codigo_postal,
@@ -195,12 +202,15 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
     }
   }
 
-  const expFinal = numero_expediente || `EXP-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+  const expFinal = numero_expediente || `EXP-${new Date().getFullYear()}-${randomUUID().replace(/-/g, '').slice(0, 16)}`;
   const unidadMedicaId = req.user.unidad_medica_id || 1;
   const usuarioRecepcionId = req.user.id;
 
-  const client = await db.pool.connect();
+  const areaFinal = (area_servicio || area || 'Medicina General').trim();
+  const tipoFinal = tipo_consulta === 'Subsecuente' || tipo_atencion === 'SUBSECUENTE' ? 'SUBSECUENTE' : 'PRIMERA_VEZ';
+  let client;
   try {
+    client = await db.pool.connect();
     await client.query('BEGIN');
 
     // A. Registrar Paciente
@@ -209,15 +219,17 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
         unidad_medica_id, numero_expediente, nombres, apellido_paterno, apellido_materno,
         curp, fecha_nacimiento, sexo, estado_civil, escolaridad, calle_numero, colonia,
         codigo_postal, telefono, derechohabiencia, enfermedades_previas, beneficiario_programa,
-        nombre_programa, num_personas_vivienda
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        nombre_programa, num_personas_vivienda, numero_afiliacion, grupo_sanguineo, religion, ocupacion, tipo_poblacion, area_servicio
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
       RETURNING *
     `;
     const pacValues = [
       unidadMedicaId, expFinal, nombres.trim(), apellido_paterno.trim(), apellido_materno ? apellido_materno.trim() : null,
       curpLimpia, fecha_nacimiento, sexo, estado_civil || null, escolaridad || null, calle_numero.trim(), colonia.trim(),
       codigo_postal || null, telefono || null, derechohabiencia, enfermedades_previas || null,
-      beneficiario_programa === true, nombre_programa || null, num_personas_vivienda || 1
+      beneficiario_programa === true, nombre_programa || null, num_personas_vivienda || 1,
+      numero_afiliacion?.trim() || null, grupo_sanguineo?.trim() || null, religion?.trim() || null,
+      ocupacion?.trim() || null, tipo_poblacion?.trim() || null, areaFinal
     ];
     const pacResult = await client.query(insertPacQuery, pacValues);
     const nuevoPaciente = pacResult.rows[0];
@@ -240,11 +252,11 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
 
     // C. Apertura de episodio en Triaje
     const insertAtencionQuery = `
-      INSERT INTO atenciones_clinicas (paciente_id, unidad_medica_id, usuario_recepcion_id, tipo_atencion, estado)
-      VALUES ($1, $2, $3, 'PRIMERA_VEZ', 'TRIAJE')
+      INSERT INTO atenciones_clinicas (paciente_id, unidad_medica_id, usuario_recepcion_id, tipo_atencion, area_servicio, estado)
+      VALUES ($1, $2, $3, $4, $5, 'TRIAJE')
       RETURNING *
     `;
-    const atencionResult = await client.query(insertAtencionQuery, [nuevoPaciente.id, unidadMedicaId, usuarioRecepcionId]);
+    const atencionResult = await client.query(insertAtencionQuery, [nuevoPaciente.id, unidadMedicaId, usuarioRecepcionId, tipoFinal, areaFinal]);
 
     await client.query('COMMIT');
 
@@ -259,33 +271,19 @@ router.post('/', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
       atencion_inicial: atencionResult.rows[0]
     });
   } catch (err) {
-    await client.query('ROLLBACK');
-    if (err.code === '23505') {
-      if (err.constraint === 'pacientes_curp_key') {
-        return res.status(409).json({ error: 'La CURP ingresada ya existe en el sistema.' });
-      }
-      if (err.constraint === 'pacientes_numero_expediente_key') {
-        return res.status(409).json({ error: 'El número de expediente ya está en uso.' });
-      }
-    }
-    res.status(500).json({ error: 'Error al registrar paciente: ' + err.message });
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    return responderErrorPaciente(res, err, 'POST', Object.keys(req.body));
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 
 // 4. PUT /api/pacientes/:id/tutor (Actualizar o asignar tutor a un paciente existente)
 router.put('/:id/tutor', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
   const { id } = req.params;
+  const errorValidacion = validarPaciente({ tutor: req.body }, true);
+  if (errorValidacion) return res.status(400).json({ error: errorValidacion });
   const { nombre_completo, parentesco, telefono_contacto, tipo_identificacion, numero_identificacion } = req.body;
-
-  if (!nombre_completo || !parentesco || !telefono_contacto || !tipo_identificacion) {
-    return res.status(400).json({ error: 'Todos los campos del tutor son obligatorios.' });
-  }
-
-  if (!PARENTESCOS_VALIDOS.includes(parentesco)) {
-    return res.status(400).json({ error: `Parentesco no permitido. Valores autorizados: ${PARENTESCOS_VALIDOS.join(', ')}` });
-  }
 
   try {
     const upsertQuery = `
@@ -309,185 +307,86 @@ router.put('/:id/tutor', requireRoles('RECEPCION', 'DIRECCION'), async (req, res
       tutor: result.rows[0]
     });
   } catch (err) {
-    res.status(500).json({ error: 'Error al actualizar tutor: ' + err.message });
+    return responderErrorPaciente(res, err, 'TUTOR', Object.keys(req.body));
   }
 });
 
 // 4.1 PUT /api/pacientes/:id (Actualizar datos generales del paciente)
 router.put('/:id', requireRoles('RECEPCION', 'DIRECCION'), async (req, res) => {
+  const errorValidacion = validarPaciente(req.body, true);
+  if (errorValidacion) return res.status(400).json({ error: errorValidacion });
   const { id } = req.params;
-  const {
-    nombres,
-    apellido_paterno,
-    apellido_materno,
-    curp,
-    fecha_nacimiento,
-    sexo,
-    estado_civil,
-    escolaridad,
-    calle_numero,
-    colonia,
-    codigo_postal,
-    telefono,
-    derechohabiencia,
-    numero_afiliacion,
-    grupo_sanguineo,
-    religion,
-    ocupacion,
-    tipo_poblacion,
-    area,
-    area_servicio,
-    tipo_consulta,
-    tipo_atencion,
-    enfermedades_previas,
-    beneficiario_programa,
-    nombre_programa,
-    num_personas_vivienda,
-    tutor
-  } = req.body;
-
+  let client;
   try {
-    let pacExist;
-    if (!isNaN(id) && Number.isInteger(Number(id))) {
-      pacExist = await db.query('SELECT id, curp, fecha_nacimiento FROM pacientes WHERE id = $1 OR numero_expediente = $2', [parseInt(id, 10), id]);
-    } else {
-      pacExist = await db.query('SELECT id, curp, fecha_nacimiento FROM pacientes WHERE numero_expediente = $1', [id]);
-    }
-
-    if (pacExist.rows.length === 0) {
+    client = await db.pool.connect();
+    await client.query('BEGIN');
+    const pacExist = /^\d+$/.test(id)
+      ? await client.query('SELECT * FROM pacientes WHERE id = $1 OR numero_expediente = $2 FOR UPDATE', [parseInt(id, 10), id])
+      : await client.query('SELECT * FROM pacientes WHERE numero_expediente = $1 FOR UPDATE', [id]);
+    if (!pacExist.rows.length) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Paciente no encontrado.' });
     }
-    const pacActual = pacExist.rows[0];
-    const pacienteIdNum = pacActual.id;
-
-    let curpFinal = pacActual.curp;
-    if (curp) {
-      const curpLimpia = curp.toUpperCase().trim();
-      if (curpLimpia.length !== 18) {
-        return res.status(400).json({ error: 'La CURP debe tener exactamente 18 caracteres.' });
-      }
-      if (curpLimpia !== pacActual.curp) {
-        const curpDup = await db.query('SELECT id FROM pacientes WHERE curp = $1 AND id != $2', [curpLimpia, pacienteIdNum]);
-        if (curpDup.rows.length > 0) {
-          return res.status(409).json({ error: 'La CURP ingresada ya pertenece a otro paciente registrado.' });
-        }
-        curpFinal = curpLimpia;
+    const paciente = pacExist.rows[0];
+    const edad = calcularEdad(req.body.fecha_nacimiento || paciente.fecha_nacimiento);
+    const tutor = req.body.tutor;
+    if (edad < 18 && !tutor) {
+      const existente = await client.query('SELECT id FROM tutores WHERE paciente_id = $1', [paciente.id]);
+      if (!existente.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Un paciente menor de edad debe tener un tutor legal registrado.' });
       }
     }
-
-    const fNacFinal = fecha_nacimiento || pacActual.fecha_nacimiento;
-    const edad = calcularEdad(fNacFinal);
-    if (edad < 18 && tutor) {
-      if (tutor.nombre_completo && tutor.parentesco && tutor.telefono_contacto && tutor.tipo_identificacion) {
-        const tutorSql = `
-          INSERT INTO tutores (paciente_id, nombre_completo, parentesco, telefono_contacto, tipo_identificacion, numero_identificacion)
-          VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT (paciente_id)
-          DO UPDATE SET
-            nombre_completo = EXCLUDED.nombre_completo,
-            parentesco = EXCLUDED.parentesco,
-            telefono_contacto = EXCLUDED.telefono_contacto,
-            tipo_identificacion = EXCLUDED.tipo_identificacion,
-            numero_identificacion = EXCLUDED.numero_identificacion
-        `;
-        await db.query(tutorSql, [
-          pacienteIdNum, tutor.nombre_completo.trim(), tutor.parentesco,
-          tutor.telefono_contacto.trim(), tutor.tipo_identificacion, tutor.numero_identificacion || null
-        ]);
-      }
+    if (tutor) {
+      await client.query(`
+        INSERT INTO tutores (paciente_id, nombre_completo, parentesco, telefono_contacto, tipo_identificacion, numero_identificacion)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (paciente_id) DO UPDATE SET
+          nombre_completo = EXCLUDED.nombre_completo, parentesco = EXCLUDED.parentesco,
+          telefono_contacto = EXCLUDED.telefono_contacto, tipo_identificacion = EXCLUDED.tipo_identificacion,
+          numero_identificacion = EXCLUDED.numero_identificacion
+      `, [paciente.id, tutor.nombre_completo.trim(), tutor.parentesco, tutor.telefono_contacto.trim(), tutor.tipo_identificacion, tutor.numero_identificacion || null]);
     }
-
-    const updateSql = `
-      UPDATE pacientes SET
-        nombres = COALESCE($1, nombres),
-        apellido_paterno = COALESCE($2, apellido_paterno),
-        apellido_materno = $3,
-        curp = $4,
-        fecha_nacimiento = COALESCE($5, fecha_nacimiento),
-        sexo = COALESCE($6, sexo),
-        estado_civil = COALESCE($7, estado_civil),
-        escolaridad = COALESCE($8, escolaridad),
-        calle_numero = COALESCE($9, calle_numero),
-        colonia = COALESCE($10, colonia),
-        codigo_postal = $11,
-        telefono = $12,
-        derechohabiencia = COALESCE($13, derechohabiencia),
-        enfermedades_previas = COALESCE($14, enfermedades_previas),
-        beneficiario_programa = COALESCE($15, beneficiario_programa),
-        nombre_programa = $16,
-        num_personas_vivienda = COALESCE($17, num_personas_vivienda),
-        numero_afiliacion = $18,
-        grupo_sanguineo = $19,
-        religion = $20,
-        ocupacion = $21,
-        tipo_poblacion = $22,
-        area_servicio = COALESCE($23, area_servicio)
-      WHERE id = $24
-      RETURNING *
-    `;
-
-    const areaVal = area || area_servicio || null;
-    const values = [
-      nombres ? nombres.trim() : null,
-      apellido_paterno ? apellido_paterno.trim() : null,
-      apellido_materno ? apellido_materno.trim() : null,
-      curpFinal,
-      fecha_nacimiento || null,
-      sexo || null,
-      estado_civil || null,
-      escolaridad || null,
-      calle_numero ? calle_numero.trim() : null,
-      colonia ? colonia.trim() : null,
-      codigo_postal || null,
-      telefono || null,
-      derechohabiencia || null,
-      enfermedades_previas || null,
-      beneficiario_programa !== undefined ? beneficiario_programa : null,
-      nombre_programa || null,
-      num_personas_vivienda || null,
-      numero_afiliacion || null,
-      grupo_sanguineo || null,
-      religion || null,
-      ocupacion || null,
-      tipo_poblacion || null,
-      areaVal ? areaVal.trim() : null,
-      pacienteIdNum
+    // Actualizar sólo los campos enviados: omitir un campo no borra su valor.
+    const permitidos = [
+      'nombres', 'apellido_paterno', 'apellido_materno', 'curp', 'fecha_nacimiento', 'sexo',
+      'estado_civil', 'escolaridad', 'calle_numero', 'colonia', 'codigo_postal', 'telefono',
+      'derechohabiencia', 'enfermedades_previas', 'beneficiario_programa', 'nombre_programa',
+      'num_personas_vivienda', 'numero_afiliacion', 'grupo_sanguineo', 'religion', 'ocupacion',
+      'tipo_poblacion', 'area_servicio'
     ];
-
-    const result = await db.query(updateSql, values);
-
-    // Actualizar también la última atención activa/reciente del paciente si se especificó área o tipo
-    if (areaVal || tipo_consulta || tipo_atencion) {
-      const tipoVal = (tipo_consulta === 'Primera vez' || tipo_atencion === 'PRIMERA_VEZ')
-        ? 'PRIMERA_VEZ'
-        : (tipo_consulta === 'Subsecuente' || tipo_atencion === 'SUBSECUENTE' ? 'SUBSECUENTE' : null);
-
-      await db.query(`
-        UPDATE atenciones_clinicas
-        SET area_servicio = COALESCE($1, area_servicio),
-            tipo_atencion = COALESCE($2, tipo_atencion)
-        WHERE id = (
-          SELECT id FROM atenciones_clinicas
-          WHERE paciente_id = $3
-          ORDER BY fecha_hora_ingreso DESC
-          LIMIT 1
-        )
-      `, [areaVal ? areaVal.trim() : null, tipoVal, pacienteIdNum]);
+    const datos = { ...req.body };
+    if (datos.area != null) datos.area_servicio = datos.area;
+    const asignaciones = [];
+    const valores = [];
+    for (const campo of permitidos) {
+      if (!Object.prototype.hasOwnProperty.call(datos, campo)) continue;
+      let valor = datos[campo];
+      if (typeof valor === 'string') valor = valor.trim() || null;
+      if (campo === 'curp') valor = valor.toUpperCase();
+      valores.push(valor);
+      asignaciones.push(`${campo} = $${valores.length}`);
     }
-
-    res.json({
-      mensaje: 'Datos del expediente actualizados exitosamente.',
-      paciente: {
-        ...result.rows[0],
-        edad,
-        es_menor: edad < 18
-      }
-    });
+    let pacienteFinal = paciente;
+    if (asignaciones.length) {
+      valores.push(paciente.id);
+      const result = await client.query(`UPDATE pacientes SET ${asignaciones.join(', ')} WHERE id = $${valores.length} RETURNING *`, valores);
+      pacienteFinal = result.rows[0];
+    }
+    const tipo = datos.tipo_atencion || (datos.tipo_consulta === 'Primera vez' ? 'PRIMERA_VEZ' : datos.tipo_consulta === 'Subsecuente' ? 'SUBSECUENTE' : null);
+    if (datos.area_servicio || tipo) {
+      await client.query(`
+        UPDATE atenciones_clinicas SET area_servicio = COALESCE($1, area_servicio), tipo_atencion = COALESCE($2, tipo_atencion)
+        WHERE id = (SELECT id FROM atenciones_clinicas WHERE paciente_id = $3 AND estado != 'FINALIZADA' ORDER BY fecha_hora_ingreso DESC LIMIT 1)
+      `, [datos.area_servicio?.trim() || null, tipo, paciente.id]);
+    }
+    await client.query('COMMIT');
+    res.json({ mensaje: 'Datos del expediente actualizados exitosamente.', paciente: { ...pacienteFinal, edad, es_menor: edad < 18 } });
   } catch (err) {
-    if (err.code === '23505' && err.constraint === 'pacientes_curp_key') {
-      return res.status(409).json({ error: 'La CURP ingresada ya pertenece a otro paciente registrado.' });
-    }
-    res.status(500).json({ error: 'Error al actualizar expediente: ' + err.message });
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    return responderErrorPaciente(res, err, 'PUT', Object.keys(req.body));
+  } finally {
+    if (client) client.release();
   }
 });
 
@@ -1031,6 +930,7 @@ router.get('/:id/expediente-completo', async (req, res) => {
               consumo_agua_litros: nt.consumo_agua_litros,
               frecuencia_ejercicio: nt.frecuencia_ejercicio
             },
+            antecedentes_patologicos: nt.antecedentes_patologicos || {},
             recordatorio_24h: nt.recordatorio_24h
           };
         } else if (cb.area_medica === 'PSICOLOGIA' && psicoMap[cb.id]) {

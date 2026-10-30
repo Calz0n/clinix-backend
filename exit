@@ -1,0 +1,9 @@
+[4mNEXT                       [0m[4m [0m[4m    LEFT[0m[4m [0m[4mLAST                       [0m[4m [0m[4m PASSED[0m[4m [0m[4mUNIT                        [0m[4m [0m[4mACTIVATES                     [0m
+Thu 2026-10-29 23:32:10 CST      28s -                                 - dnf-makecache.timer          dnf-makecache.service
+Fri 2026-10-30 00:00:17 CST    28min Thu 2026-10-29 11:38:50 CST       - plocate-updatedb.timer       plocate-updatedb.service
+Fri 2026-10-30 00:50:35 CST 1h 18min Thu 2026-10-29 12:11:56 CST       - logrotate.timer              logrotate.service
+Fri 2026-10-30 23:30:52 CST      23h Thu 2026-10-29 23:30:52 CST 48s ago systemd-tmpfiles-clean.timer systemd-tmpfiles-clean.service
+Sun 2026-11-01 01:00:00 CST   2 days Sun 2026-10-25 01:01:01 CST       - raid-check.timer             raid-check.service
+Mon 2026-11-02 01:29:11 CST   3 days Mon 2026-10-26 10:49:43 CST       - fstrim.timer                 fstrim.service
+
+[0;1;39m6 timers listed.[0m

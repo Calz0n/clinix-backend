@@ -4,19 +4,6 @@ const { authenticateToken, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Asegurar columnas de consultorios y especialidades en PostgreSQL
-(async () => {
-  try {
-    await db.query(`
-      ALTER TABLE unidades_medicas ADD COLUMN IF NOT EXISTS consultorios INT DEFAULT 4;
-      ALTER TABLE unidades_medicas ADD COLUMN IF NOT EXISTS especialidades_activas JSONB DEFAULT '["Medicina General", "Odontología", "Nutrición", "Psicología", "Enfermería / Triaje"]'::jsonb;
-      ALTER TABLE unidades_medicas ADD COLUMN IF NOT EXISTS medicos_por_especialidad JSONB DEFAULT '{}'::jsonb;
-    `);
-  } catch (e) {
-    console.error('Error al inicializar columnas en unidades_medicas:', e.message);
-  }
-})();
-
 // 1. GET /api/unidades (Listado completo de sedes con módulos y doctores asignados)
 router.get('/', async (req, res) => {
   const { todas } = req.query;

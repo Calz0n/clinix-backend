@@ -1,0 +1,18 @@
+[Unit]
+Description=Respaldo PostgreSQL de Clinix
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/clinix
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+UMask=0077
+ExecStart=/bin/bash /root/clinix/respaldo_clinix.sh
+TimeoutStartSec=1h
+Restart=on-failure
+RestartSec=5min
+StandardOutput=journal
+StandardError=journal

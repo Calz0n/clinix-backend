@@ -28,3 +28,9 @@
 [2026-10-25 02:00:04] Respaldo generado con éxito: /root/clinix/backups/clinix_backup_20261025_020002.sql.gz (Tamaño: 16K)
 [2026-10-25 02:00:04] Política de retención aplicada (antigüedad máxima: 30 días).
 ==================================================
+[2026-10-30 00:26:03] Iniciando respaldo de clinix_db. Esperando PostgreSQL...
+[2026-10-30 00:26:06] RESPALDO COMPLETADO: /root/clinix/backups/clinix_backup_20261030_002604_7097.sql.gz (12K).
+[2026-10-30 00:26:06] Retención aplicada: respaldos con antigüedad mayor a 30 días.
+[2026-10-30 00:26:07] Iniciando respaldo de clinix_db. Esperando PostgreSQL...
+[2026-10-30 00:26:09] RESPALDO COMPLETADO: /root/clinix/backups/clinix_backup_20261030_002608_7256.sql.gz (12K).
+[2026-10-30 00:26:09] Retención aplicada: respaldos con antigüedad mayor a 30 días.

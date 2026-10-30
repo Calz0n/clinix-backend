@@ -46,6 +46,8 @@ services:
       context: ./backend
       dockerfile: Containerfile
     container_name: clinix_backend
+    env_file:
+      - ./backend/.env
     restart: unless-stopped
     environment:
       NODE_ENV: production

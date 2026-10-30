@@ -274,4 +274,298 @@ router.post('/medicina-general', requireRoles('MEDICO_GENERAL', 'DIRECCION'), as
   }
 });
 
+
+// 5. GET /api/consultas/datos-certificado/:paciente_id (Auto-llenado inteligente para Certificados de Medicina General y Nutrición)
+router.get('/datos-certificado/:paciente_id', async (req, res) => {
+  const { paciente_id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const [
+      folioRes,
+      userRes,
+      pacRes,
+      hcRes,
+      triajeRes,
+      mgRes,
+      nutriRes
+    ] = await Promise.all([
+      db.query("SELECT COUNT(*)::INT as total FROM consultas_medicina_general WHERE emite_certificado = TRUE"),
+      db.query("SELECT nombre, apellidos, cedula_profesional, rol FROM usuarios WHERE id = $1", [userId]),
+      db.query(`
+        SELECT id, numero_expediente, nombres, apellido_paterno, apellido_materno,
+               curp, fecha_nacimiento, sexo, ocupacion, grupo_sanguineo, enfermedades_previas
+        FROM pacientes WHERE id = $1
+      `, [paciente_id]),
+      db.query("SELECT * FROM historias_clinicas WHERE paciente_id = $1 LIMIT 1", [paciente_id]),
+      db.query(`
+        SELECT t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
+               t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar,
+               t.peso_kg, t.talla_metros, t.imc, t.clasificacion_imc,
+               ac.id as atencion_id, ac.tipo_atencion
+        FROM triaje_signos_vitales t
+        JOIN atenciones_clinicas ac ON ac.id = t.atencion_id
+        WHERE ac.paciente_id = $1
+        ORDER BY t.fecha_hora DESC
+        LIMIT 1
+      `, [paciente_id]),
+      db.query(`
+        SELECT cm.nota_objetivo, cm.diagnostico_cie10, cm.diagnostico_descripcion, cb.motivo_consulta
+        FROM consultas_medicina_general cm
+        JOIN consultas_base cb ON cb.id = cm.consulta_id
+        JOIN atenciones_clinicas ac ON ac.id = cb.atencion_id
+        WHERE ac.paciente_id = $1
+        ORDER BY cb.fecha_hora DESC
+        LIMIT 1
+      `, [paciente_id]),
+      db.query(`
+        SELECT cn.circunferencia_cintura, cn.circunferencia_cadera, cn.consumo_agua_litros,
+               cn.frecuencia_ejercicio, cn.recordatorio_24h, cb.observaciones, cb.motivo_consulta
+        FROM consultas_nutricion cn
+        JOIN consultas_base cb ON cb.id = cn.consulta_id
+        JOIN atenciones_clinicas ac ON ac.id = cb.atencion_id
+        WHERE ac.paciente_id = $1
+        ORDER BY cb.fecha_hora DESC
+        LIMIT 1
+      `, [paciente_id])
+    ]);
+
+    const anioActual = new Date().getFullYear();
+    const numCert = (folioRes.rows[0]?.total || 0) + 1;
+    const folio = `CM${String(numCert).padStart(3, '0')}--${anioActual}`;
+
+    const prof = userRes.rows[0] || {};
+    const pac = pacRes.rows[0] || {};
+    const hc = hcRes.rows[0] || {};
+    const tri = triajeRes.rows[0] || {};
+    const mg = mgRes.rows[0] || {};
+    const nut = nutriRes.rows[0] || {};
+
+    // Calcular edad y formatear fecha de nacimiento
+    let edad = 0;
+    let fechaNacStr = '—';
+    if (pac.fecha_nacimiento) {
+      const fn = new Date(pac.fecha_nacimiento);
+      const hoy = new Date();
+      edad = hoy.getFullYear() - fn.getFullYear();
+      if (hoy.getMonth() < fn.getMonth() || (hoy.getMonth() === fn.getMonth() && hoy.getDate() < fn.getDate())) {
+        edad--;
+      }
+      fechaNacStr = fn.toISOString().split('T')[0];
+    }
+
+    // Construir AHF y APP legibles
+    const ahfItems = [];
+    if (hc.ahf_diabetes) ahfItems.push('Diabetes Mellitus');
+    if (hc.ahf_hipertension) ahfItems.push('Hipertensión Arterial');
+    if (hc.ahf_cardiopatias) ahfItems.push('Cardiopatías');
+    if (hc.ahf_neoplasias) ahfItems.push('Neoplasias');
+    if (hc.ahf_nefropatias) ahfItems.push('Nefropatías');
+    if (hc.ahf_otros && hc.ahf_otros.trim()) ahfItems.push(hc.ahf_otros.trim());
+    const ahfTexto = ahfItems.length > 0 ? ahfItems.join(', ') : 'Interrogados y negados';
+
+    const appItems = [];
+    if (pac.enfermedades_previas && pac.enfermedades_previas.trim() && pac.enfermedades_previas.toLowerCase() !== 'ninguna') {
+      appItems.push(pac.enfermedades_previas.trim());
+    }
+    if (hc.app_cronico_degenerativas && hc.app_cronico_degenerativas.trim()) appItems.push(hc.app_cronico_degenerativas.trim());
+    if (hc.app_alergias && hc.app_alergias.trim()) appItems.push(`Alergias: ${hc.app_alergias.trim()}`);
+    if (hc.app_quirurgicos && hc.app_quirurgicos.trim()) appItems.push(`Quirúrgicos: ${hc.app_quirurgicos.trim()}`);
+    if (hc.app_otros && hc.app_otros.trim()) appItems.push(hc.app_otros.trim());
+    const appTexto = appItems.length > 0 ? appItems.join(' | ') : 'Interrogados y negados';
+
+    res.json({
+      folio,
+      profesional: {
+        nombre_completo: `${prof.nombre || ''} ${prof.apellidos || ''}`.trim(),
+        cedula_profesional: prof.cedula_profesional || 'En trámite',
+        rol: prof.rol || ''
+      },
+      paciente: {
+        id: pac.id,
+        numero_expediente: pac.numero_expediente || '—',
+        nombre_completo: `${pac.nombres || ''} ${pac.apellido_paterno || ''} ${pac.apellido_materno || ''}`.trim(),
+        sexo: pac.sexo || 'M',
+        edad,
+        fecha_nacimiento: fechaNacStr,
+        ocupacion: pac.ocupacion || '—',
+        grupo_sanguineo: pac.grupo_sanguineo || 'Desconocido'
+      },
+      antecedentes: {
+        ahf: ahfTexto,
+        app: appTexto
+      },
+      triaje: {
+        atencion_id: tri.atencion_id || null,
+        tipo_atencion: tri.tipo_atencion || 'PRIMERA_VEZ',
+        tension_arterial: tri.tension_arterial || '120/80 mmHg',
+        frecuencia_cardiaca: tri.frecuencia_cardiaca != null ? `${tri.frecuencia_cardiaca} lpm` : '74 lpm',
+        frecuencia_respiratoria: tri.frecuencia_respiratoria != null ? `${tri.frecuencia_respiratoria} rpm` : '18 rpm',
+        temperatura: tri.temperatura != null ? `${tri.temperatura} °C` : '36.5 °C',
+        saturacion_oxigeno: tri.saturacion_oxigeno != null ? `${tri.saturacion_oxigeno}%` : '98%',
+        peso_kg: tri.peso_kg != null ? String(tri.peso_kg) : '',
+        talla_metros: tri.talla_metros != null ? String(tri.talla_metros) : '',
+        imc: tri.imc != null ? String(tri.imc) : '',
+        clasificacion_imc: tri.clasificacion_imc || ''
+      },
+      ultima_consulta_mg: {
+        ef: mg.nota_objetivo || '',
+        diagnostico_cie10: mg.diagnostico_cie10 || 'Z00.0',
+        diagnostico_descripcion: mg.diagnostico_descripcion || 'CLÍNICAMENTE SANO'
+      },
+      ultima_consulta_nutri: {
+        cintura: nut.circunferencia_cintura != null ? String(nut.circunferencia_cintura) : '',
+        cadera: nut.circunferencia_cadera != null ? String(nut.circunferencia_cadera) : '',
+        consumo_agua: nut.consumo_agua_litros != null ? `${nut.consumo_agua_litros} L` : '2.0 L',
+        recordatorio_24h: nut.recordatorio_24h || null,
+        observaciones: nut.observaciones || ''
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al obtener datos para certificado: ' + err.message });
+  }
+});
+
+// 6. POST /api/consultas/emitir-certificado (Registra la emisión oficial del Certificado Médico y suma a estadísticas)
+router.post('/emitir-certificado', requireRoles('MEDICO_GENERAL', 'DIRECCION'), async (req, res) => {
+  const {
+    paciente_id,
+    atencion_id,
+    ef,
+    diagnostico,
+    ahf,
+    app,
+    grupo_sanguineo
+  } = req.body;
+
+  if (!paciente_id && !atencion_id) {
+    return res.status(400).json({ error: 'Se requiere seleccionar un paciente para emitir el certificado médico.' });
+  }
+
+  const medicoId = req.user.id;
+  const unidadMedicaId = req.user.unidad_medica_id || 1;
+  const client = await db.pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Si se envió grupo_sanguineo, actualizarlo en la ficha del paciente si estaba vacío
+    if (paciente_id && grupo_sanguineo && grupo_sanguineo.trim() !== '') {
+      await client.query(
+        "UPDATE pacientes SET grupo_sanguineo = COALESCE(NULLIF(grupo_sanguineo, ''), $1) WHERE id = $2",
+        [grupo_sanguineo.trim(), paciente_id]
+      );
+    }
+
+    // Verificar si ya existe una consulta de medicina general el día de hoy para este paciente/atención
+    let consultaMgId = null;
+    if (atencion_id) {
+      const existingRes = await client.query(`
+        SELECT cm.id
+        FROM consultas_medicina_general cm
+        JOIN consultas_base cb ON cb.id = cm.consulta_id
+        WHERE cb.atencion_id = $1
+        LIMIT 1
+      `, [atencion_id]);
+      if (existingRes.rows.length > 0) {
+        consultaMgId = existingRes.rows[0].id;
+      }
+    }
+
+    if (!consultaMgId && paciente_id) {
+      const existingTodayRes = await client.query(`
+        SELECT cm.id
+        FROM consultas_medicina_general cm
+        JOIN consultas_base cb ON cb.id = cm.consulta_id
+        JOIN atenciones_clinicas ac ON ac.id = cb.atencion_id
+        WHERE ac.paciente_id = $1
+          AND cb.fecha_hora >= CURRENT_DATE AND cb.fecha_hora < (CURRENT_DATE + INTERVAL '1 day')
+        ORDER BY cb.fecha_hora DESC
+        LIMIT 1
+      `, [paciente_id]);
+      if (existingTodayRes.rows.length > 0) {
+        consultaMgId = existingTodayRes.rows[0].id;
+      }
+    }
+
+    if (consultaMgId) {
+      await client.query(
+        "UPDATE consultas_medicina_general SET emite_certificado = TRUE WHERE id = $1",
+        [consultaMgId]
+      );
+    } else {
+      // Crear atención y consulta de certificado médico para que sume en Hoja Diaria y Concentrado Mensual
+      let targetAtencionId = atencion_id;
+      if (!targetAtencionId) {
+        const openAtencionRes = await client.query(`
+          SELECT id FROM atenciones_clinicas
+          WHERE paciente_id = $1
+            AND fecha_hora_ingreso >= CURRENT_DATE AND fecha_hora_ingreso < (CURRENT_DATE + INTERVAL '1 day')
+          ORDER BY fecha_hora_ingreso DESC
+          LIMIT 1
+        `, [paciente_id]);
+        if (openAtencionRes.rows.length > 0) {
+          targetAtencionId = openAtencionRes.rows[0].id;
+          await client.query("UPDATE atenciones_clinicas SET estado = 'FINALIZADA' WHERE id = $1", [targetAtencionId]);
+        } else {
+          const prevCountRes = await client.query("SELECT COUNT(*)::INT as c FROM atenciones_clinicas WHERE paciente_id = $1", [paciente_id]);
+          const tipoAtencion = (prevCountRes.rows[0]?.c || 0) === 0 ? 'PRIMERA_VEZ' : 'SUBSECUENTE';
+          const newAtRes = await client.query(`
+            INSERT INTO atenciones_clinicas (paciente_id, unidad_medica_id, usuario_recepcion_id, tipo_atencion, estado, area_servicio)
+            VALUES ($1, $2, $3, $4, 'FINALIZADA', 'Medicina General')
+            RETURNING id
+          `, [paciente_id, unidadMedicaId, medicoId, tipoAtencion]);
+          targetAtencionId = newAtRes.rows[0].id;
+        }
+      } else {
+        await client.query("UPDATE atenciones_clinicas SET estado = 'FINALIZADA' WHERE id = $1", [targetAtencionId]);
+      }
+
+      const baseRes = await client.query(`
+        INSERT INTO consultas_base (atencion_id, especialista_id, area_medica, motivo_consulta, observaciones)
+        VALUES ($1, $2, 'MEDICINA_GENERAL', 'Expedición de Certificado Médico Oficial', $3)
+        RETURNING id
+      `, [targetAtencionId, medicoId, `AHF: ${ahf || 'Negados'} | APP: ${app || 'Negados'}`]);
+
+      const diagDesc = (diagnostico && diagnostico.trim()) ? diagnostico.trim() : 'EXAMEN MÉDICO Y EXPEDICIÓN DE CERTIFICADO (SANO)';
+      await client.query(`
+        INSERT INTO consultas_medicina_general (
+          consulta_id, nota_subjetivo, nota_objetivo, nota_analisis, nota_plan,
+          diagnostico_cie10, diagnostico_descripcion, clasificacion_morbilidad,
+          emite_certificado
+        ) VALUES ($1, $2, $3, $4, $5, 'Z02.7', $6, 'Certificado Médico / Sano', TRUE)
+      `, [
+        baseRes.rows[0].id,
+        'Acude para valoración clínica y expedición de certificado médico oficial.',
+        (ef && ef.trim()) ? ef.trim() : 'Paciente consciente, orientado, cardiopulmonar y abdomen sin alteraciones.',
+        `Z02.7 - ${diagDesc}`,
+        'Se expide certificado médico oficial con vigencia de 15 días.',
+        diagDesc
+      ]);
+
+      await client.query(`
+        INSERT INTO bitacora_productividad_diaria (usuario_id, unidad_medica_id, fecha, total_atenciones)
+        VALUES ($1, $2, CURRENT_DATE, 1)
+        ON CONFLICT (usuario_id, fecha)
+        DO UPDATE SET total_atenciones = bitacora_productividad_diaria.total_atenciones + 1
+      `, [medicoId, unidadMedicaId]);
+    }
+
+    const folioCountRes = await client.query("SELECT COUNT(*)::INT as total FROM consultas_medicina_general WHERE emite_certificado = TRUE");
+    const anioActual = new Date().getFullYear();
+    const folio = `CM${String(folioCountRes.rows[0]?.total || 1).padStart(3, '0')}--${anioActual}`;
+
+    await client.query('COMMIT');
+    res.status(201).json({
+      message: 'Certificado médico registrado exitosamente y contabilizado en estadísticas.',
+      folio
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Error al registrar emisión de certificado médico: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
