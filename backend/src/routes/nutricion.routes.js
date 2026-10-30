@@ -1,3 +1,4 @@
+const { obtenerColaConsulta, validarContextoConsulta, finalizarContextoConsulta, responderErrorConsulta } = require('../utils/consultaContexto');
 const { validarAntecedentes, normalizarAntecedentes } = require('../utils/antecedentesNutricion');
 const express = require('express');
 const db = require('../db');
@@ -87,38 +88,10 @@ router.get('/oms-referencia', async (req, res) => {
 // 0. GET /api/nutricion/pendientes (Cola de pacientes en espera de consulta de nutrición hoy)
 router.get('/pendientes', async (req, res) => {
   try {
-    const query = `
-      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
-             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
-             p.fecha_nacimiento, p.sexo, p.derechohabiencia, p.enfermedades_previas,
-             t.id as triaje_id, t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
-             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
-             t.clasificacion_imc, t.detecciones_riesgo,
-             tut.nombre_completo as tutor_nombre, tut.parentesco as tutor_parentesco, tut.telefono_contacto as tutor_telefono
-      FROM atenciones_clinicas a
-      JOIN pacientes p ON a.paciente_id = p.id
-      LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
-      LEFT JOIN tutores tut ON p.id = tut.paciente_id
-      WHERE a.estado = 'EN_CONSULTA'
-        AND (a.area_servicio ILIKE '%NUTRI%' OR a.area_servicio IS NULL)
-        AND a.fecha_hora_ingreso >= CURRENT_DATE AND a.fecha_hora_ingreso < (CURRENT_DATE + INTERVAL '1 day')
-      ORDER BY a.fecha_hora_ingreso ASC
-    `;
-    const result = await db.query(query);
-
-    const hoy = new Date();
-    const lista = result.rows.map(row => {
-      const nac = new Date(row.fecha_nacimiento);
-      let edad = hoy.getFullYear() - nac.getFullYear();
-      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
-        edad--;
-      }
-      return { ...row, edad, es_menor: edad < 18 };
-    });
-
-    res.json(lista);
+    res.json(await obtenerColaConsulta(db, 'NUTRICION'));
   } catch (err) {
-    res.status(500).json({ error: 'Error al consultar lista de espera de nutrición: ' + err.message });
+    console.error('[COLA NUTRICION]', err.code || 'ERROR');
+    res.status(503).json({ error: 'No se pudo actualizar la lista de este servicio. Intenta nuevamente.' });
   }
 });
 
@@ -281,6 +254,8 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     client = await db.pool.connect();
     await client.query('BEGIN');
 
+    const contexto = await validarContextoConsulta(client, req.body, 'NUTRICION');
+
     // 1. Obtener datos del paciente y de la atención clínica
     const atencionRes = await client.query(`
       SELECT a.id, a.paciente_id, a.estado, p.fecha_nacimiento, p.sexo,
@@ -298,11 +273,6 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     }
 
     const pacienteInfo = atencionRes.rows[0];
-    if (pacienteInfo.estado === 'FINALIZADA') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ error: 'Esta atención ya está finalizada. Selecciona una atención pendiente para registrar una nueva evaluación.' });
-    }
-
     // Calcular edad
     const hoy = new Date();
     const nac = new Date(pacienteInfo.fecha_nacimiento);
@@ -372,16 +342,9 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     }
 
     // 5.1 Finalizar la atención clínica para que no siga en lista de espera
-    await client.query("UPDATE atenciones_clinicas SET estado = 'FINALIZADA' WHERE id = $1", [atencion_id]);
 
-    // 5. Si venía de un tratamiento cruzado, actualizarlo a ATENDIDO
-    if (tratamiento_cruzado_id) {
-      await client.query(`
-        UPDATE tratamientos_cruzados 
-        SET estado = 'ATENDIDO' 
-        WHERE id = $1 AND area_destino = 'NUTRICION'
-      `, [tratamiento_cruzado_id]);
-    }
+
+
 
     // 6. Registrar Consentimiento Informado si se proporcionó
     let consentGuardado = null;
@@ -409,6 +372,7 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     `;
     await client.query(upsertBitacoraQuery, [nutriologoId, unidadMedicaId]);
 
+    await finalizarContextoConsulta(client, contexto);
     await client.query('COMMIT');
 
     res.status(201).json({
@@ -423,7 +387,7 @@ router.post('/', requireRoles('NUTRIOLOGO', 'DIRECCION'), async (req, res) => {
     });
   } catch (err) {
     if (client) await client.query('ROLLBACK').catch(() => {});
-    res.status(500).json({ error: 'Error al registrar consulta nutricional: ' + err.message });
+    return responderErrorConsulta(res, err, 'NUTRICION');
   } finally {
     if (client) client.release();
   }

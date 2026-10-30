@@ -42,6 +42,24 @@ async function request(route, { method = 'GET', body, auth = token } = {}) {
   return { status: response.status, json: await response.json(), headers: response.headers };
 }
 
+async function pasarTriaje(atencion_id) {
+  const r = await request('/triaje', {method:'POST', body:{atencion_id,tension_arterial:'120/80',frecuencia_cardiaca:75,frecuencia_respiratoria:18,temperatura:36.5,saturacion_oxigeno:98,peso_kg:70,talla_metros:1.7}});
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+}
+let numeroCaso = 0;
+async function crearAtencion(area, lista = true) {
+  const r = await request('/pacientes', {method:'POST', body:{...adulto,curp:`SERV${String(++numeroCaso).padStart(14,'0')}`,area_servicio:area}});
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+  if (lista) await pasarTriaje(r.json.atencion_inicial.id);
+  return {atencion_id:r.json.atencion_inicial.id, paciente_id:r.json.paciente.id};
+}
+const servicios = [
+  {area:'Medicina General', codigo:'MEDICINA_GENERAL', ruta:'/consultas/medicina-general', cola:'/consultas/pendientes', datos:{motivo_consulta:'Prueba',nota_subjetivo:'Prueba',nota_objetivo:'Prueba',nota_analisis:'Prueba',nota_plan:'Prueba',diagnostico_cie10:'Z00.0',diagnostico_descripcion:'Prueba',clasificacion_morbilidad:'Medicina General'}},
+  {area:'Odontología', codigo:'ODONTOLOGIA', ruta:'/odontologia', cola:'/odontologia/pendientes', datos:{motivo_consulta:'Prueba',tipo_denticion:'ADULTA',piezas:[]}},
+  {area:'Nutrición', codigo:'NUTRICION', ruta:'/nutricion', cola:'/nutricion/pendientes', datos:{motivo_consulta:'Prueba'}},
+  {area:'Psicología', codigo:'PSICOLOGIA', ruta:'/psicologia', cola:'/psicologia/pendientes', datos:{motivo_consulta:'Prueba',evaluacion_clinica:'Prueba',nota_evolucion:'Prueba',plan_intervencion:'Prueba'}},
+];
+
 test('Contrato de comunicación Clinix (HTTP + PostgreSQL embebido)', async t => {
   t.after(async () => {
     if (server) await new Promise(resolve => server.close(resolve));
@@ -221,7 +239,7 @@ test('Contrato de comunicación Clinix (HTTP + PostgreSQL embebido)', async t =>
       const atencion_id=alta.json.atencion_inicial.id;
       const triaje=await request('/triaje',{method:'POST',body:{atencion_id,tension_arterial:'120/80',frecuencia_cardiaca:75,frecuencia_respiratoria:18,temperatura:36.5,saturacion_oxigeno:98,peso_kg:70,talla_metros:1.7,procedimientos:[{tipo_procedimiento:'Curación',cantidad:1,observaciones:'Sólo prueba'}]}});
       assert.equal(triaje.status,201,JSON.stringify(triaje.json));
-      const guardado=await request(caso.ruta,{method:'POST',body:{atencion_id,...caso.body}});
+      const guardado=await request(caso.ruta,{method:'POST',body:{atencion_id,paciente_id:alta.json.paciente.id,...caso.body}});
       if(guardado.status!==201) errores.push(`${caso.ruta}: ${JSON.stringify(guardado.json)}`);
     }
     assert.deepEqual(errores,[]);
@@ -235,7 +253,8 @@ test('Contrato de comunicación Clinix (HTTP + PostgreSQL embebido)', async t =>
     assert.equal(altaA.status,201);assert.equal(altaB.status,201);
     pacienteA=altaA.json.paciente.id;pacienteB=altaB.json.paciente.id;atencionA=altaA.json.atencion_inicial.id;
     for(const [atencion,datos] of [[atencionA,antecedentesA],[altaB.json.atencion_inicial.id,antecedentesB]]){
-      const r=await request('/nutricion',{method:'POST',body:{atencion_id:atencion,motivo_consulta:'Prueba de antecedentes',antecedentes_patologicos:datos}});
+      await pasarTriaje(atencion);
+      const r=await request('/nutricion',{method:'POST',body:{atencion_id:atencion,paciente_id:atencion===atencionA?pacienteA:pacienteB,motivo_consulta:'Prueba de antecedentes',antecedentes_patologicos:datos}});
       assert.equal(r.status,201,JSON.stringify(r.json));assert.deepEqual(r.json.consulta.antropometria.antecedentes_patologicos,datos);
       if(atencion===atencionA)consultaA=r.json.consulta.id;
     }
@@ -254,7 +273,8 @@ test('Contrato de comunicación Clinix (HTTP + PostgreSQL embebido)', async t =>
   await t.test('Una nueva evaluación conserva el historial y guarda también los falsos',async()=>{
     const atencion=await request('/atenciones',{method:'POST',body:{paciente_id:pacienteA,area_servicio:'Nutrición',tipo_atencion:'SUBSECUENTE'}});
     assert.equal(atencion.status,201,JSON.stringify(atencion.json));
-    const r=await request('/nutricion',{method:'POST',body:{atencion_id:atencion.json.atencion.id,motivo_consulta:'Segunda evaluación',antecedentes_patologicos:antecedentesB}});
+    await pasarTriaje(atencion.json.atencion.id);
+    const r=await request('/nutricion',{method:'POST',body:{atencion_id:atencion.json.atencion.id,paciente_id:pacienteA,motivo_consulta:'Segunda evaluación',antecedentes_patologicos:antecedentesB}});
     assert.equal(r.status,201,JSON.stringify(r.json));
     const historial=await request(`/nutricion/historial/${pacienteA}`);
     assert.equal(historial.json.length,2);
@@ -265,15 +285,16 @@ test('Contrato de comunicación Clinix (HTTP + PostgreSQL embebido)', async t =>
   await t.test('Rechazar valores de casillas malformados sin escribir una consulta',async()=>{
     const atencion=await request('/atenciones',{method:'POST',body:{paciente_id:pacienteB,area_servicio:'Nutrición'}});
     assert.equal(atencion.status,201,JSON.stringify(atencion.json));
+    await pasarTriaje(atencion.json.atencion.id);
     const antes=(await query('SELECT COUNT(*)::int AS n FROM consultas_nutricion')).rows[0].n;
     for(const datos of [null,[],true,'diabetes',{diabetes:'true'},{diabetes:1},{campo_desconocido:true}]){
-      const r=await request('/nutricion',{method:'POST',body:{atencion_id:atencion.json.atencion.id,motivo_consulta:'No debe guardarse',antecedentes_patologicos:datos}});
+      const r=await request('/nutricion',{method:'POST',body:{atencion_id:atencion.json.atencion.id,paciente_id:pacienteB,motivo_consulta:'No debe guardarse',antecedentes_patologicos:datos}});
       assert.equal(r.status,400,JSON.stringify(r.json));
     }
     assert.equal((await query('SELECT COUNT(*)::int AS n FROM consultas_nutricion')).rows[0].n,antes);
   });
   await t.test('No duplicar una evaluación en una atención finalizada',async()=>{
-    const r=await request('/nutricion',{method:'POST',body:{atencion_id:atencionA,motivo_consulta:'Duplicado',antecedentes_patologicos:antecedentesB}});
+    const r=await request('/nutricion',{method:'POST',body:{atencion_id:atencionA,paciente_id:pacienteA,motivo_consulta:'Duplicado',antecedentes_patologicos:antecedentesB}});
     assert.equal(r.status,409,JSON.stringify(r.json));
     assert.equal((await query('SELECT COUNT(*)::int AS n FROM consultas_base WHERE atencion_id=$1',[atencionA])).rows[0].n,1);
   });
@@ -293,6 +314,203 @@ test('Contrato de comunicación Clinix (HTTP + PostgreSQL embebido)', async t =>
     assert.equal(r.json.paciente.area_servicio,'Psicología');
     const despues=(await query('SELECT id,area_servicio FROM atenciones_clinicas WHERE paciente_id=$1 ORDER BY id',[pacienteA])).rows;
     assert.deepEqual(despues,antes);
+  });
+  await t.test('Las cuatro colas muestran sólo el servicio correspondiente', async () => {
+    const casos = [];
+    for (const servicio of servicios) casos.push({...await crearAtencion(servicio.area, false),servicio});
+    // La base embebida usa una conexión; las transacciones se prueban secuencialmente.
+    for (const caso of casos) await pasarTriaje(caso.atencion_id);
+    for (const servicio of servicios) {
+      const r = await request(servicio.cola);
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      for (const caso of casos) assert.equal(r.json.some(p => p.atencion_id === caso.atencion_id), caso.servicio.codigo === servicio.codigo);
+    }
+  });
+  await t.test('Un área nula o desconocida no aparece en ninguna cola', async () => {
+    const nulo = await crearAtencion('Nutrición');
+    const desconocido = await crearAtencion('Nutrición');
+    await query('UPDATE atenciones_clinicas SET area_servicio=NULL WHERE id=$1', [nulo.atencion_id]);
+    await query("UPDATE atenciones_clinicas SET area_servicio='Área desconocida' WHERE id=$1", [desconocido.atencion_id]);
+    for (const servicio of servicios) {
+      const r = await request(servicio.cola);
+      assert.equal(r.status, 200, JSON.stringify(r.json));
+      assert.equal(r.json.some(p => [nulo.atencion_id,desconocido.atencion_id].includes(p.atencion_id)), false);
+    }
+  });
+  await t.test('Ningún servicio guarda una atención que todavía está en Triaje', async () => {
+    for (const servicio of servicios) {
+      const caso = await crearAtencion(servicio.area, false);
+      const antes = (await query('SELECT COUNT(*)::int AS n FROM consultas_base')).rows[0].n;
+      const r = await request(servicio.ruta, {method:'POST',body:{...caso,...servicio.datos}});
+      assert.equal(r.status, 409, JSON.stringify(r.json));
+      assert.equal((await query('SELECT COUNT(*)::int AS n FROM consultas_base')).rows[0].n, antes);
+    }
+  });
+  await t.test('Guardar desde otra especialidad se rechaza sin cambiar el área', async () => {
+    for (const servicio of servicios) {
+      const caso = await crearAtencion(servicio.codigo === 'NUTRICION' ? 'Psicología' : 'Nutrición');
+      const antes = (await query('SELECT area_servicio,estado FROM atenciones_clinicas WHERE id=$1',[caso.atencion_id])).rows[0];
+      const r = await request(servicio.ruta, {method:'POST',body:{...caso,...servicio.datos}});
+      assert.equal(r.status, 409, JSON.stringify(r.json));
+      assert.deepEqual((await query('SELECT area_servicio,estado FROM atenciones_clinicas WHERE id=$1',[caso.atencion_id])).rows[0], antes);
+      assert.equal((await query('SELECT COUNT(*)::int AS n FROM consultas_base WHERE atencion_id=$1',[caso.atencion_id])).rows[0].n,0);
+    }
+  });
+  await t.test('Los cuatro servicios requieren el identificador del paciente, incluso con una atención válida', async () => {
+    for (const servicio of servicios) {
+      const caso = await crearAtencion(servicio.area);
+      const r = await request(servicio.ruta,{method:'POST',body:{atencion_id:caso.atencion_id,...servicio.datos}});
+      assert.equal(r.status,400,JSON.stringify(r.json));
+      assert.equal((await query('SELECT COUNT(*)::int AS n FROM consultas_base WHERE atencion_id=$1',[caso.atencion_id])).rows[0].n,0);
+    }
+  });
+  await t.test('Paciente y atención deben coincidir en los cuatro servicios', async () => {
+    for (const servicio of servicios) {
+      const a = await crearAtencion(servicio.area), b = await crearAtencion(servicio.area);
+      const r = await request(servicio.ruta, {method:'POST',body:{...a,paciente_id:b.paciente_id,...servicio.datos}});
+      assert.equal(r.status,409,JSON.stringify(r.json));
+      assert.equal((await query('SELECT COUNT(*)::int AS n FROM consultas_base WHERE atencion_id=$1',[a.atencion_id])).rows[0].n,0);
+    }
+  });
+  await t.test('La derivación válida aparece en su destino y se atiende una sola vez', async () => {
+    const origen = servicios[0], destino = servicios[3];
+    const caso = await crearAtencion(origen.area);
+    const salida = await request(origen.ruta, {method:'POST',body:{...caso,...origen.datos,tratamiento_cruzado:{area_destino:destino.codigo,motivo_derivacion:'Interconsulta de prueba'}}});
+    assert.equal(salida.status,201,JSON.stringify(salida.json));
+    const tratamiento_cruzado_id = salida.json.tratamiento_cruzado.id;
+    assert.equal((await query('SELECT estado FROM atenciones_clinicas WHERE id=$1',[caso.atencion_id])).rows[0].estado,'FINALIZADA');
+    for (const servicio of servicios) {
+      const r = await request(servicio.cola);
+      const item = r.json.find(p => p.atencion_id === caso.atencion_id);
+      assert.equal(!!item,servicio.codigo === destino.codigo);
+      if (item) assert.equal(item.tratamiento_cruzado_id,tratamiento_cruzado_id);
+    }
+    const body = {...caso,...destino.datos,tratamiento_cruzado_id};
+    const llegada = await request(destino.ruta,{method:'POST',body});
+    assert.equal(llegada.status,201,JSON.stringify(llegada.json));
+    assert.equal((await query('SELECT estado FROM tratamientos_cruzados WHERE id=$1',[tratamiento_cruzado_id])).rows[0].estado,'ATENDIDO');
+    assert.equal((await request(destino.ruta,{method:'POST',body})).status,409);
+    assert.equal((await query("SELECT COUNT(*)::int AS n FROM consultas_base WHERE atencion_id=$1 AND area_medica='PSICOLOGIA'",[caso.atencion_id])).rows[0].n,1);
+    assert.equal((await query('SELECT area_servicio FROM atenciones_clinicas WHERE id=$1',[caso.atencion_id])).rows[0].area_servicio,'Medicina General');
+  });
+  await t.test('Las cuatro especialidades aceptan su derivación y excluyen a las demás', async () => {
+    for (const destino of servicios) {
+      const origen = destino.codigo === 'MEDICINA_GENERAL' ? servicios[3] : servicios[0];
+      const caso = await crearAtencion(origen.area);
+      const datos = {area_destino:destino.area,motivo_derivacion:'Derivación de prueba'};
+      const body = {...caso,...origen.datos,...(origen.codigo === 'MEDICINA_GENERAL' ? {tratamiento_cruzado:datos} : {derivar_a:datos})};
+      const r = await request(origen.ruta,{method:'POST',body});
+      assert.equal(r.status,201,JSON.stringify(r.json));
+      const ref = r.json.tratamiento_cruzado?.id || r.json.derivacion_generada.id;
+      const cola = await request(destino.cola);
+      assert.equal(cola.json.find(p => p.atencion_id === caso.atencion_id)?.tratamiento_cruzado_id,ref);
+      const llegada = await request(destino.ruta,{method:'POST',body:{...caso,...destino.datos,tratamiento_cruzado_id:ref}});
+      assert.equal(llegada.status,201,JSON.stringify(llegada.json));
+      assert.equal((await query('SELECT estado FROM tratamientos_cruzados WHERE id=$1',[ref])).rows[0].estado,'ATENDIDO');
+    }
+  });
+  await t.test('Una derivación interna inválida se rechaza sin guardar una nota parcial', async () => {
+    const caso = await crearAtencion('Medicina General');
+    const r = await request(servicios[0].ruta,{method:'POST',body:{...caso,...servicios[0].datos,tratamiento_cruzado:{area_destino:'Servicio inexistente',motivo_derivacion:'Prueba'}}});
+    assert.equal(r.status,400,JSON.stringify(r.json));
+    assert.equal((await query('SELECT COUNT(*)::int AS n FROM consultas_base WHERE atencion_id=$1',[caso.atencion_id])).rows[0].n,0);
+  });
+  await t.test('Una derivación ajena o cancelada no permite guardar', async () => {
+    const a = await crearAtencion('Nutrición'), b = await crearAtencion('Nutrición');
+    const ref = (await query("INSERT INTO tratamientos_cruzados(atencion_origen_id,area_origen,area_destino,motivo_derivacion,estado) VALUES($1,'NUTRICION','PSICOLOGIA','Prueba','PENDIENTE') RETURNING id",[b.atencion_id])).rows[0].id;
+    assert.equal((await request('/psicologia',{method:'POST',body:{...a,...servicios[3].datos,tratamiento_cruzado_id:ref}})).status,409);
+    await query("UPDATE tratamientos_cruzados SET estado='CANCELADO' WHERE id=$1",[ref]);
+    assert.equal((await request('/psicologia',{method:'POST',body:{...b,...servicios[3].datos,tratamiento_cruzado_id:ref}})).status,409);
+  });
+  await t.test('Cambiar el área invalida la captura anterior y actualiza ambas colas', async () => {
+    const caso = await crearAtencion('Nutrición');
+    assert.equal((await request(`/pacientes/${caso.paciente_id}`,{method:'PUT',body:{area:'Psicología'}})).status,200);
+    const nutri=await request('/nutricion/pendientes'), psico=await request('/psicologia/pendientes');
+    assert.equal(nutri.json.some(p => p.atencion_id === caso.atencion_id),false);
+    assert.equal(psico.json.some(p => p.atencion_id === caso.atencion_id),true);
+    assert.equal((await request('/nutricion',{method:'POST',body:{...caso,...servicios[2].datos}})).status,409);
+    assert.equal((await request('/psicologia',{method:'POST',body:{...caso,...servicios[3].datos}})).status,201);
+  });
+  const dxPsico=[{cie10:'F41.1',descripcion:'Trastorno de ansiedad generalizada',principal:false},{cie10:'F32.1',descripcion:'Episodio depresivo moderado',principal:true}];
+  const datosPsico={motivo_consulta:'Seguimiento psicológico',nota_evolucion:'Nota de prueba',plan_intervencion:'Plan de prueba',diagnosticos:dxPsico,estado_diagnostico:'REGISTRADO'};
+  let casoMulti,consultaMulti;
+  await t.test('Diagnósticos múltiples: guardar y recuperar principal y secundarios en historial y expediente',async()=>{
+    casoMulti=await crearAtencion('Psicología');
+    const r=await request('/psicologia',{method:'POST',body:{...casoMulti,...datosPsico}});
+    assert.equal(r.status,201,JSON.stringify(r.json));
+    const nota=r.json.consulta.detalle_psicologia;consultaMulti=nota.consulta_id;
+    assert.deepEqual(nota.diagnosticos,dxPsico);assert.equal(nota.estado_diagnostico,'REGISTRADO');
+    assert.ok(nota.evaluacion_clinica.startsWith('Principal: F32.1'));assert.ok(nota.evaluacion_clinica.includes('Secundario: F41.1'));
+    assert.deepEqual((await request(`/psicologia/historial/${casoMulti.paciente_id}`)).json[0].diagnosticos,dxPsico);
+    const exp=(await request(`/pacientes/${casoMulti.paciente_id}/expediente-completo`)).json;
+    const notaExp=exp.timeline_visitas.flatMap(v=>v.consultas).find(c=>c.psicologia);
+    assert.deepEqual(notaExp.psicologia.diagnosticos,dxPsico);assert.equal(notaExp.psicologia.estado_diagnostico,'REGISTRADO');
+    const otro=await crearAtencion('Psicología');assert.deepEqual((await request(`/psicologia/historial/${otro.paciente_id}`)).json,[]);
+  });
+  await t.test('Una sesión en evaluación se guarda sin inventar código CIE-10',async()=>{
+    const caso=await crearAtencion('Psicología');
+    const r=await request('/psicologia',{method:'POST',body:{...caso,...datosPsico,diagnosticos:[],estado_diagnostico:'EN_EVALUACION'}});
+    assert.equal(r.status,201,JSON.stringify(r.json));const nota=r.json.consulta.detalle_psicologia;
+    assert.deepEqual(nota.diagnosticos,[]);assert.equal(nota.estado_diagnostico,'EN_EVALUACION');
+    assert.equal(nota.evaluacion_clinica,'En evaluación / sin diagnóstico establecido.');
+  });
+  await t.test('Rechazar diagnósticos inválidos, repetidos o sin principal sin guardar una nota parcial',async()=>{
+    const caso=await crearAtencion('Psicología'),d={cie10:'F41.1',descripcion:'Prueba',principal:true};
+    const invalidos=[{diagnosticos:null},{diagnosticos:{}},{diagnosticos:[]},{diagnosticos:[null]},
+      {diagnosticos:[{...d,principal:'true'}]},{diagnosticos:[{...d,principal:false}]},
+      {diagnosticos:[d,{...d,cie10:'F32.1'}]},{diagnosticos:[d,{...d,cie10:' f41.1 ',principal:false}]},
+      {diagnosticos:[{...d,cie10:'INVALIDO'}]},{diagnosticos:[{...d,descripcion:''}]},{diagnosticos:[{...d,descripcion:'x'.repeat(201)}]},
+      {diagnosticos:Array.from({length:21},(_,i)=>({...d,cie10:`F${String(i).padStart(2,'0')}`,principal:i===0}))},
+      {estado_diagnostico:'LEGADO'},{estado_diagnostico:'EN_EVALUACION'}];
+    for(const invalido of invalidos){
+      const r=await request('/psicologia',{method:'POST',body:{...caso,...datosPsico,...invalido}});
+      assert.equal(r.status,400,JSON.stringify(r.json));
+      assert.equal((await query('SELECT COUNT(*)::int AS n FROM consultas_base WHERE atencion_id=$1',[caso.atencion_id])).rows[0].n,0);
+      assert.equal((await query('SELECT estado FROM atenciones_clinicas WHERE id=$1',[caso.atencion_id])).rows[0].estado,'EN_CONSULTA');
+    }
+    const incompleto={...caso,...datosPsico};delete incompleto.estado_diagnostico;
+    assert.equal((await request('/psicologia',{method:'POST',body:incompleto})).status,400);
+  });
+  await t.test('Normalizar la captura y conservar diagnósticos separados entre sesiones del mismo paciente',async()=>{
+    const atencion=await request('/atenciones',{method:'POST',body:{paciente_id:casoMulti.paciente_id,area_servicio:'Psicología'}});
+    const atencion_id=atencion.json.atencion.id;await pasarTriaje(atencion_id);
+    const r=await request('/psicologia',{method:'POST',body:{atencion_id,paciente_id:casoMulti.paciente_id,...datosPsico,diagnosticos:[{cie10:' f90.0 ',descripcion:' Segunda sesión ',principal:true}]}});
+    assert.equal(r.status,201,JSON.stringify(r.json));assert.deepEqual(r.json.consulta.detalle_psicologia.diagnosticos,[{cie10:'F90.0',descripcion:'Segunda sesión',principal:true}]);
+    const historial=(await request(`/psicologia/historial/${casoMulti.paciente_id}`)).json;
+    assert.equal(historial.length,2);assert.deepEqual(historial.find(n=>n.consulta_id===consultaMulti).diagnosticos,dxPsico);
+  });
+  await t.test('La base protege principal único, códigos repetidos y coherencia del estado',async()=>{
+    for(const lista of [dxPsico.map(d=>({...d,principal:true})),dxPsico.map(d=>({...d,principal:false})),[dxPsico[1],{...dxPsico[1],principal:false}]]){
+      await assert.rejects(query('UPDATE consultas_psicologia SET diagnosticos=$1::jsonb WHERE consulta_id=$2',[JSON.stringify(lista),consultaMulti]),{code:'23514'});
+    }
+    await assert.rejects(query("UPDATE consultas_psicologia SET estado_diagnostico='EN_EVALUACION' WHERE consulta_id=$1",[consultaMulti]),{code:'23514'});
+    assert.deepEqual((await query('SELECT diagnosticos FROM consultas_psicologia WHERE consulta_id=$1',[consultaMulti])).rows[0].diagnosticos,dxPsico);
+  });
+  await t.test('Migración 07 repetible conserva texto antiguo y diagnósticos nuevos',async()=>{
+    const caso=await crearAtencion('Psicología'),anterior='F90.0 - Texto íntegro anterior, sin reinterpretación.';
+    const r=await request('/psicologia',{method:'POST',body:{...caso,motivo_consulta:'Legado',evaluacion_clinica:anterior,nota_evolucion:'Nota anterior',plan_intervencion:'Plan anterior'}});
+    assert.equal(r.status,201,JSON.stringify(r.json));await inicializarMigraciones();await inicializarMigraciones();
+    const nota=(await request(`/psicologia/historial/${caso.paciente_id}`)).json[0];
+    assert.equal(nota.evaluacion_clinica,anterior);assert.equal(nota.estado_diagnostico,'LEGADO');assert.deepEqual(nota.diagnosticos,[]);
+    assert.deepEqual((await query('SELECT diagnosticos FROM consultas_psicologia WHERE consulta_id=$1',[consultaMulti])).rows[0].diagnosticos,dxPsico);
+  });
+  await t.test('Reportes muestran todos los diagnósticos y cuentan una consulta incluso con interconsulta',async()=>{
+    const reportes=require('../src/reportes/psicologia');
+    const fecha=(await query('SELECT CURRENT_DATE::text AS fecha')).rows[0].fecha;
+    const [anio,mes]=fecha.split('-').map(Number),antes=await reportes.obtenerDatosMensuales(dbMock,anio,mes);
+    const caso=await crearAtencion('Psicología');await query("UPDATE pacientes SET nombres='MULTIDIAGNOSTICO' WHERE id=$1",[caso.paciente_id]);
+    const r=await request('/psicologia',{method:'POST',body:{...caso,...datosPsico,diagnosticos:[{cie10:'F41.1',descripcion:'Ansiedad <prueba>',principal:true},{cie10:'F32.1',descripcion:'Diagnóstico secundario',principal:false}],derivar_a:{area_destino:'MEDICINA_GENERAL',motivo_derivacion:'Prueba'}}});
+    assert.equal(r.status,201,JSON.stringify(r.json));
+    assert.equal((await request(servicios[0].ruta,{method:'POST',body:{...caso,...servicios[0].datos,tratamiento_cruzado_id:r.json.derivacion_generada.id}})).status,201);
+    const diario=await reportes.obtenerDatosDiarios(dbMock,fecha),filas=diario.pacientes.filter(p=>p.nombre.includes('MULTIDIAGNOSTICO'));
+    assert.equal(filas.length,1);assert.ok(filas[0].diagnostico.includes('Principal: F41.1'));assert.ok(filas[0].diagnostico.includes('Secundario: F32.1'));
+    assert.equal((await reportes.obtenerDatosMensuales(dbMock,anio,mes)).total_general_mes,antes.total_general_mes+1);
+    for(const html of [reportes.renderizarDiarioHtml(diario),reportes.renderizarDiarioExcel(diario)]){
+      assert.ok(html.includes('Ansiedad &lt;prueba&gt;'));assert.ok(!html.includes('Ansiedad <prueba>'));assert.ok(html.includes('Secundario: F32.1'));
+    }
+    const tablero=await request('/estadisticas/tablero-resumen');assert.equal(tablero.status,200);
+    const top=tablero.json.top_diagnosticos_mes.filter(d=>d.area==='PSICOLOGIA');
+    assert.ok(top.some(d=>d.cie10==='F32.1'));assert.ok(!top.some(d=>d.cie10==='Z00.0'));
   });
   await t.test('Reportes y certificado responden como HTML descargable',async()=>{
     const hoy=new Date();

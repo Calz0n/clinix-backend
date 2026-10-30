@@ -1,3 +1,4 @@
+const { resumenDiagnosticos } = require('../../utils/diagnosticosPsicologia');
 // Consultas SQL específicas para el módulo de Psicología
 // Dirección de Salud Pública Municipal de Coatzacoalcos 2026-2029
 
@@ -9,12 +10,12 @@ async function obtenerDatosDiarios(db, fecha, unidadId) {
            t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
            t.peso_kg, t.talla_metros, t.imc, t.saturacion_oxigeno, t.glucosa_capilar,
            cb.motivo_consulta, cb.observaciones,
-           cps.evaluacion_clinica, cps.nota_evolucion, cps.plan_intervencion,
+           cps.evaluacion_clinica, cps.diagnosticos, cps.estado_diagnostico, cps.nota_evolucion, cps.plan_intervencion,
            u.nombre as psicologo_nombre, u.apellidos as psicologo_apellidos
     FROM atenciones_clinicas ac
     JOIN pacientes p ON p.id = ac.paciente_id
     LEFT JOIN triaje_signos_vitales t ON t.atencion_id = ac.id
-    LEFT JOIN consultas_base cb ON cb.atencion_id = ac.id AND (cb.area_medica = 'PSICOLOGIA' OR ac.area_servicio ILIKE '%PSICO%')
+    LEFT JOIN consultas_base cb ON cb.atencion_id = ac.id AND cb.area_medica = 'PSICOLOGIA'
     LEFT JOIN consultas_psicologia cps ON cps.consulta_id = cb.id
     LEFT JOIN usuarios u ON u.id = cb.especialista_id
     WHERE ac.fecha_hora_ingreso >= $1::date AND ac.fecha_hora_ingreso < ($1::date + INTERVAL '1 day')
@@ -44,7 +45,7 @@ async function obtenerDatosDiarios(db, fecha, unidadId) {
       nombrePsicologo = `Lic. ${row.psicologo_nombre} ${row.psicologo_apellidos || ''}`.trim();
     }
 
-    const diagnostico = row.motivo_consulta || row.observaciones || row.evaluacion_clinica || 'Atención Psicológica';
+    const diagnostico = resumenDiagnosticos(row.diagnosticos, row.estado_diagnostico, row.evaluacion_clinica) || row.motivo_consulta || row.observaciones || 'Atención Psicológica';
 
     return {
       numero: index + 1,
@@ -87,7 +88,7 @@ async function obtenerDatosMensuales(db, anio, mes, unidadId) {
            cps.evaluacion_clinica
     FROM atenciones_clinicas ac
     JOIN pacientes p ON p.id = ac.paciente_id
-    LEFT JOIN consultas_base cb ON cb.atencion_id = ac.id AND (cb.area_medica = 'PSICOLOGIA' OR ac.area_servicio ILIKE '%PSICO%')
+    LEFT JOIN consultas_base cb ON cb.atencion_id = ac.id AND cb.area_medica = 'PSICOLOGIA'
     LEFT JOIN consultas_psicologia cps ON cps.consulta_id = cb.id
     WHERE EXTRACT(YEAR FROM ac.fecha_hora_ingreso) = $1
       AND EXTRACT(MONTH FROM ac.fecha_hora_ingreso) = $2

@@ -937,6 +937,8 @@ router.get('/:id/expediente-completo', async (req, res) => {
           const ps = psicoMap[cb.id];
           detalleConsulta.psicologia = {
             evaluacion_clinica: ps.evaluacion_clinica,
+            diagnosticos: ps.diagnosticos || [],
+            estado_diagnostico: ps.estado_diagnostico,
             nota_evolucion: ps.nota_evolucion,
             plan_intervencion: ps.plan_intervencion,
             consentimiento_informado: consentimientosMap[cb.id] || null

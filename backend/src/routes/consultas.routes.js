@@ -1,3 +1,4 @@
+const { obtenerColaConsulta, validarContextoConsulta, finalizarContextoConsulta, responderErrorConsulta, validarDerivacionSalida } = require('../utils/consultaContexto');
 const express = require('express');
 const db = require('../db');
 const { authenticateToken, requireRoles } = require('../middleware/auth');
@@ -33,36 +34,12 @@ router.get('/catalogo-cie10', (req, res) => {
 });
 
 // 2. GET /api/consultas/pendientes (Cola de pacientes en estado EN_CONSULTA con sus signos vitales de triaje)
-router.get('/pendientes', requireRoles('MEDICO_GENERAL', 'ODONTOLOGO', 'NUTRIOLOGO', 'PSICOLOGO', 'DIRECCION'), async (req, res) => {
+router.get('/pendientes', requireRoles('MEDICO_GENERAL', 'DIRECCION'), async (req, res) => {
   try {
-    const query = `
-      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado,
-             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
-             p.fecha_nacimiento, p.sexo, p.derechohabiencia, p.enfermedades_previas,
-             t.id as triaje_id, t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
-             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
-             t.clasificacion_imc, t.detecciones_riesgo
-      FROM atenciones_clinicas a
-      JOIN pacientes p ON a.paciente_id = p.id
-      LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
-      WHERE a.estado = 'EN_CONSULTA' AND DATE(a.fecha_hora_ingreso) = CURRENT_DATE
-      ORDER BY a.fecha_hora_ingreso ASC
-    `;
-    const result = await db.query(query);
-
-    const hoy = new Date();
-    const lista = result.rows.map(row => {
-      const nac = new Date(row.fecha_nacimiento);
-      let edad = hoy.getFullYear() - nac.getFullYear();
-      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
-        edad--;
-      }
-      return { ...row, edad, es_menor: edad < 18 };
-    });
-
-    res.json(lista);
+    res.json(await obtenerColaConsulta(db, 'MEDICINA_GENERAL'));
   } catch (err) {
-    res.status(500).json({ error: 'Error al consultar lista de espera de consulta: ' + err.message });
+    console.error('[COLA MEDICINA_GENERAL]', err.code || 'ERROR');
+    res.status(503).json({ error: 'No se pudo actualizar la lista de este servicio. Intenta nuevamente.' });
   }
 });
 
@@ -175,27 +152,13 @@ router.post('/medicina-general', requireRoles('MEDICO_GENERAL', 'DIRECCION'), as
   const medicoId = req.user.id;
   const unidadMedicaId = req.user.unidad_medica_id || 1;
 
-  const client = await db.pool.connect();
+  let client;
   try {
+    client = await db.pool.connect();
     await client.query('BEGIN');
 
-    // Validar estado de la atención clínica
-    const atencionRes = await client.query(
-      'SELECT id, paciente_id, estado FROM atenciones_clinicas WHERE id = $1',
-      [atencion_id]
-    );
-
-    if (atencionRes.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'La atención clínica especificada no existe.' });
-    }
-
-    if (atencionRes.rows[0].estado !== 'EN_CONSULTA') {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        error: `La atención no se encuentra lista para consulta (Estado actual: ${atencionRes.rows[0].estado}).`
-      });
-    }
+    const contexto = await validarContextoConsulta(client, req.body, 'MEDICINA_GENERAL');
+    validarDerivacionSalida(tratamiento_cruzado, 'MEDICINA_GENERAL');
 
     // A. Insertar cabecera en consultas_base
     const insertBaseQuery = `
@@ -241,10 +204,7 @@ router.post('/medicina-general', requireRoles('MEDICO_GENERAL', 'DIRECCION'), as
     }
 
     // D. Transición de estado: Finalizar la visita médica
-    await client.query(
-      "UPDATE atenciones_clinicas SET estado = 'FINALIZADA' WHERE id = $1",
-      [atencion_id]
-    );
+
 
     // E. Actualizar la bitácora de productividad diaria del médico
     const upsertBitacoraQuery = `
@@ -255,6 +215,7 @@ router.post('/medicina-general', requireRoles('MEDICO_GENERAL', 'DIRECCION'), as
     `;
     await client.query(upsertBitacoraQuery, [medicoId, unidadMedicaId]);
 
+    await finalizarContextoConsulta(client, contexto);
     await client.query('COMMIT');
 
     res.status(201).json({
@@ -267,10 +228,10 @@ router.post('/medicina-general', requireRoles('MEDICO_GENERAL', 'DIRECCION'), as
       estado_atencion: 'FINALIZADA'
     });
   } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: 'Error al registrar consulta médica: ' + err.message });
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    return responderErrorConsulta(res, err, 'MEDICINA_GENERAL');
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

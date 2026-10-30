@@ -1,3 +1,4 @@
+const { resumenDiagnosticos } = require('../utils/diagnosticosPsicologia');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -84,14 +85,19 @@ router.get('/tablero-resumen', async (req, res) => {
       `),
       db.query(`
         SELECT
-          COALESCE(cm.diagnostico_cie10, 'Z00.0') AS cie10,
-          COALESCE(cm.diagnostico_descripcion, cb.motivo_consulta) AS diagnostico,
+          CASE WHEN cb.area_medica = 'PSICOLOGIA' THEN dp.cie10 ELSE COALESCE(cm.diagnostico_cie10, 'Z00.0') END AS cie10,
+          CASE WHEN cb.area_medica = 'PSICOLOGIA' THEN COALESCE(dp.descripcion, cps.evaluacion_clinica, cb.motivo_consulta) ELSE COALESCE(cm.diagnostico_descripcion, cb.motivo_consulta) END AS diagnostico,
           cb.area_medica AS area,
           COUNT(*)::INT AS total
         FROM consultas_base cb
         LEFT JOIN consultas_medicina_general cm ON cm.consulta_id = cb.id
+        LEFT JOIN consultas_psicologia cps ON cps.consulta_id = cb.id
+        LEFT JOIN LATERAL (
+          SELECT d->>'cie10' AS cie10, d->>'descripcion' AS descripcion
+          FROM jsonb_array_elements(cps.diagnosticos) d WHERE d->>'principal' = 'true' LIMIT 1
+        ) dp ON TRUE
         WHERE DATE_TRUNC('month', cb.fecha_hora) = DATE_TRUNC('month', CURRENT_DATE)
-        GROUP BY COALESCE(cm.diagnostico_cie10, 'Z00.0'), COALESCE(cm.diagnostico_descripcion, cb.motivo_consulta), cb.area_medica
+        GROUP BY cb.area_medica, cm.diagnostico_cie10, cm.diagnostico_descripcion, cb.motivo_consulta, dp.cie10, dp.descripcion, cps.evaluacion_clinica
         ORDER BY total DESC
         LIMIT 10
       `)
@@ -130,7 +136,8 @@ router.get('/diario', async (req, res) => {
              cb.id as consulta_id, cb.motivo_consulta,
              cm.diagnostico_cie10, cm.diagnostico_descripcion, cm.clasificacion_morbilidad, cm.pruebas_rapidas, cm.canalizacion_externa,
              cn.circunferencia_cintura, cn.circunferencia_cadera,
-             co.indice_cpod, co.tipo_denticion
+             co.indice_cpod, co.tipo_denticion,
+             cps.diagnosticos, cps.estado_diagnostico, cps.evaluacion_clinica
       FROM atenciones_clinicas ac
       JOIN pacientes p ON p.id = ac.paciente_id
       LEFT JOIN triaje_signos_vitales t ON t.atencion_id = ac.id
@@ -138,6 +145,7 @@ router.get('/diario', async (req, res) => {
       LEFT JOIN consultas_medicina_general cm ON cm.consulta_id = cb.id
       LEFT JOIN consultas_nutricion cn ON cn.consulta_id = cb.id
       LEFT JOIN consultas_odontologia co ON co.consulta_id = cb.id
+      LEFT JOIN consultas_psicologia cps ON cps.consulta_id = cb.id
       WHERE DATE(ac.fecha_hora_ingreso) = $1
         AND (
           $2 = 'GENERAL' OR
@@ -161,7 +169,7 @@ router.get('/diario', async (req, res) => {
         edad,
         sexo: row.sexo,
         tipo_atencion: row.tipo_atencion,
-        diagnostico: row.diagnostico_descripcion || row.motivo_consulta || 'En espera / Valoración',
+        diagnostico: (area.toUpperCase() === 'PSICOLOGIA' ? resumenDiagnosticos(row.diagnosticos, row.estado_diagnostico, row.evaluacion_clinica) : '') || row.diagnostico_descripcion || row.motivo_consulta || 'En espera / Valoración',
         morbilidad: row.clasificacion_morbilidad || 'General',
         talla: row.talla_metros || '-',
         peso: row.peso_kg || '-',

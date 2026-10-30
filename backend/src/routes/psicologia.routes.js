@@ -1,4 +1,6 @@
+const { obtenerColaConsulta, validarContextoConsulta, finalizarContextoConsulta, responderErrorConsulta, validarDerivacionSalida } = require('../utils/consultaContexto');
 const express = require('express');
+const { validarDiagnosticos, ErrorDiagnosticos } = require('../utils/diagnosticosPsicologia');
 const db = require('../db');
 const { authenticateToken, requireRoles } = require('../middleware/auth');
 
@@ -12,38 +14,10 @@ router.use(requireRoles('PSICOLOGO', 'DIRECCION'));
 // 0. GET /api/psicologia/pendientes (Cola de pacientes en espera de consulta psicológica hoy)
 router.get('/pendientes', async (req, res) => {
   try {
-    const query = `
-      SELECT a.id as atencion_id, a.fecha_hora_ingreso, a.tipo_atencion, a.estado, a.area_servicio,
-             p.id as paciente_id, p.numero_expediente, p.curp, p.nombres, p.apellido_paterno, p.apellido_materno,
-             p.fecha_nacimiento, p.sexo, p.derechohabiencia, p.enfermedades_previas,
-             t.id as triaje_id, t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
-             t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
-             t.clasificacion_imc, t.detecciones_riesgo,
-             tut.nombre_completo as tutor_nombre, tut.parentesco as tutor_parentesco, tut.telefono_contacto as tutor_telefono
-      FROM atenciones_clinicas a
-      JOIN pacientes p ON a.paciente_id = p.id
-      LEFT JOIN triaje_signos_vitales t ON a.id = t.atencion_id
-      LEFT JOIN tutores tut ON p.id = tut.paciente_id
-      WHERE a.estado = 'EN_CONSULTA'
-        AND (a.area_servicio ILIKE '%PSICOLOG%' OR a.area_servicio IS NULL)
-        AND a.fecha_hora_ingreso >= CURRENT_DATE AND a.fecha_hora_ingreso < (CURRENT_DATE + INTERVAL '1 day')
-      ORDER BY a.fecha_hora_ingreso ASC
-    `;
-    const result = await db.query(query);
-
-    const hoy = new Date();
-    const lista = result.rows.map(row => {
-      const nac = new Date(row.fecha_nacimiento);
-      let edad = hoy.getFullYear() - nac.getFullYear();
-      if (hoy.getMonth() < nac.getMonth() || (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) {
-        edad--;
-      }
-      return { ...row, edad, es_menor: edad < 18 };
-    });
-
-    res.json(lista);
+    res.json(await obtenerColaConsulta(db, 'PSICOLOGIA'));
   } catch (err) {
-    res.status(500).json({ error: 'Error al consultar lista de espera de psicología: ' + err.message });
+    console.error('[COLA PSICOLOGIA]', err.code || 'ERROR');
+    res.status(503).json({ error: 'No se pudo actualizar la lista de este servicio. Intenta nuevamente.' });
   }
 });
 
@@ -68,7 +42,7 @@ router.get('/atendidos-hoy', async (req, res) => {
              t.tension_arterial, t.frecuencia_cardiaca, t.frecuencia_respiratoria,
              t.temperatura, t.saturacion_oxigeno, t.glucosa_capilar, t.peso_kg, t.talla_metros, t.imc,
              cb.id as consulta_id, cb.fecha_hora as consulta_fecha_hora, cb.motivo_consulta, cb.observaciones,
-             cp.evaluacion_clinica, cp.nota_evolucion, cp.plan_intervencion,
+             cp.evaluacion_clinica, cp.diagnosticos, cp.estado_diagnostico, cp.nota_evolucion, cp.plan_intervencion,
              u.nombre || ' ' || u.apellidos as especialista_nombre
       FROM atenciones_clinicas a
       JOIN pacientes p ON a.paciente_id = p.id
@@ -146,7 +120,7 @@ router.get('/historial/:paciente_id', async (req, res) => {
   try {
     const query = `
       SELECT cb.id as consulta_id, cb.fecha_hora, cb.motivo_consulta, cb.observaciones,
-             cp.evaluacion_clinica, cp.nota_evolucion, cp.plan_intervencion,
+             cp.evaluacion_clinica, cp.diagnosticos, cp.estado_diagnostico, cp.nota_evolucion, cp.plan_intervencion,
              u.nombre || ' ' || u.apellidos as psicologo_nombre, u.cedula_profesional as psicologo_cedula
       FROM consultas_base cb
       JOIN atenciones_clinicas ac ON cb.atencion_id = ac.id
@@ -176,7 +150,9 @@ router.post('/', async (req, res) => {
     derivar_a // Objeto opcional: { area_destino, prioridad, motivo_derivacion }
   } = req.body;
 
-  if (!atencion_id || !motivo_consulta || !evaluacion_clinica || !nota_evolucion || !plan_intervencion) {
+  if (!atencion_id || typeof motivo_consulta !== 'string' || !motivo_consulta.trim() ||
+      typeof nota_evolucion !== 'string' || !nota_evolucion.trim() ||
+      typeof plan_intervencion !== 'string' || !plan_intervencion.trim()) {
     return res.status(400).json({
       error: 'La atención clínica, motivo de consulta, evaluación clínica, nota de evolución y plan de intervención son obligatorios.'
     });
@@ -185,24 +161,15 @@ router.post('/', async (req, res) => {
   const psicologoId = req.user.id;
   const unidadMedicaId = req.user.unidad_medica_id || 1;
 
-  const client = await db.pool.connect();
+  let client;
   try {
+    const datosDiagnostico = validarDiagnosticos(req.body);
+    client = await db.pool.connect();
     await client.query('BEGIN');
 
-    // 1. Validar atención y obtener paciente
-    const atencionRes = await client.query(`
-      SELECT a.id, a.paciente_id, p.fecha_nacimiento
-      FROM atenciones_clinicas a
-      JOIN pacientes p ON a.paciente_id = p.id
-      WHERE a.id = $1
-    `, [atencion_id]);
-
-    if (atencionRes.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'La atención clínica especificada no existe.' });
-    }
-
-    const pacienteInfo = atencionRes.rows[0];
+    const contexto = await validarContextoConsulta(client, req.body, 'PSICOLOGIA');
+    validarDerivacionSalida(derivar_a, 'PSICOLOGIA');
+    const pacienteInfo = contexto.atencion;
 
     const hoy = new Date();
     const nac = new Date(pacienteInfo.fecha_nacimiento);
@@ -224,23 +191,15 @@ router.post('/', async (req, res) => {
 
     // B. Insertar nota psicológica confidencial
     const insertPsicoQuery = `
-      INSERT INTO consultas_psicologia (consulta_id, evaluacion_clinica, nota_evolucion, plan_intervencion)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO consultas_psicologia (consulta_id, evaluacion_clinica, nota_evolucion, plan_intervencion, diagnosticos, estado_diagnostico)
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6)
       RETURNING *
     `;
     const psicoResult = await client.query(insertPsicoQuery, [
-      consultaBase.id, evaluacion_clinica.trim(), nota_evolucion.trim(), plan_intervencion.trim()
+      consultaBase.id, datosDiagnostico.resumen, nota_evolucion.trim(), plan_intervencion.trim(),
+      JSON.stringify(datosDiagnostico.diagnosticos), datosDiagnostico.estado
     ]);
     const consultaPsico = psicoResult.rows[0];
-
-    // C. Si venía de una interconsulta, marcarla como ATENDIDA
-    if (tratamiento_cruzado_id) {
-      await client.query(`
-        UPDATE tratamientos_cruzados 
-        SET estado = 'ATENDIDO' 
-        WHERE id = $1 AND area_destino = 'PSICOLOGIA'
-      `, [tratamiento_cruzado_id]);
-    }
 
     // D. Registrar Consentimiento Informado específico de Psicología
     let consentGuardado = null;
@@ -271,9 +230,6 @@ router.post('/', async (req, res) => {
         atencion_id, derivar_a.area_destino, derivar_a.prioridad || 'NORMAL', derivar_a.motivo_derivacion.trim()
       ]);
       derivacionSaliente = cruzadoRes.rows[0];
-    } else {
-      // Si no deriva a otra área, finalizar la atención clínica
-      await client.query("UPDATE atenciones_clinicas SET estado = 'FINALIZADA' WHERE id = $1", [atencion_id]);
     }
 
     // F. Incrementar bitácora de productividad diaria del psicólogo (+1)
@@ -285,6 +241,7 @@ router.post('/', async (req, res) => {
     `;
     await client.query(upsertBitacoraQuery, [psicologoId, unidadMedicaId]);
 
+    await finalizarContextoConsulta(client, contexto);
     await client.query('COMMIT');
 
     res.status(201).json({
@@ -298,10 +255,11 @@ router.post('/', async (req, res) => {
       derivacion_generada: derivacionSaliente
     });
   } catch (err) {
-    await client.query('ROLLBACK');
-    res.status(500).json({ error: 'Error al registrar sesión psicológica: ' + err.message });
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    if (err instanceof ErrorDiagnosticos) return res.status(400).json({ error: err.message });
+    return responderErrorConsulta(res, err, 'PSICOLOGIA');
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

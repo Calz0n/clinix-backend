@@ -5,7 +5,7 @@ const db = require('../src/db');
 async function main() {
   try {
     await aplicarMigraciones(db);
-    console.log('Migraciones de pacientes y nutrición aplicadas. Se conservaron los registros existentes.');
+    console.log('Migraciones de pacientes, nutrición y diagnósticos de psicología aplicadas. Se conservaron los registros existentes.');
   } finally {
     await db.pool.end();
   }

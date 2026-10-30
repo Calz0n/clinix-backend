@@ -1,3 +1,4 @@
+const escaparHtml = valor => String(valor ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
 // Plantilla HTML y Excel de la Hoja Diaria Oficial de Psicología
 // Dirección de Salud Pública Municipal de Coatzacoalcos 2026-2029
 // Reproducción exacta de la hoja física oficial (WhatsApp Image 2026-10-07 at 12.02.05.jpeg)
@@ -129,7 +130,7 @@ function renderizarDiarioHtml(datos) {
               <td>${f.imc}</td>
               <td>${f.spo2}</td>
               <td>${f.glucosa}</td>
-              <td class="text-left">${f.diagnostico}</td>
+              <td class="text-left">${escaparHtml(f.diagnostico).replace(/\n/g, '<br>')}</td>
             </tr>
           `).join('')}
           <tr class="row-total">
@@ -208,7 +209,7 @@ function renderizarDiarioExcel(datos) {
           <td>${f.sexo_f}</td><td>${f.sexo_m}</td>
           <td>${f.primera_vez}</td><td>${f.subsecuente}</td>
           <td>${f.ta}</td><td>${f.fc}</td><td>${f.fr}</td><td>${f.peso}</td><td>${f.talla}</td><td>${f.imc}</td><td>${f.spo2}</td><td>${f.glucosa}</td>
-          <td class="text-left">${f.diagnostico}</td>
+          <td class="text-left">${escaparHtml(f.diagnostico).replace(/\n/g, '<br>')}</td>
         </tr>
       `).join('')}
       <tr class="row-total">
